@@ -33,6 +33,7 @@ export const VerificadorBoletinProfesor = () => {
   const [fotoUrl, setFotoUrl] = useState("");
 
   const scannerRef = useRef(null);
+  const timeoutCamaraRef = useRef(null); // Referencia para el temporizador de los 10 segundos
 
   // =========================================================================
   // LÓGICA DE PROCESAMIENTO DE FOTO
@@ -113,11 +114,15 @@ export const VerificadorBoletinProfesor = () => {
   // =========================================================================
   const procesarHash = async (hashExtraido) => {
     try {
+      if (timeoutCamaraRef.current) {
+        clearTimeout(timeoutCamaraRef.current);
+      }
+
       setLoading(true);
       setError(null);
       setResultado(null);
       setFotoUrl("");
-      detenerCamara();
+      await detenerCamara();
 
       const hashLimpio = hashExtraido.trim();
       console.log("Verificando hash:", hashLimpio);
@@ -141,20 +146,40 @@ export const VerificadorBoletinProfesor = () => {
   // =========================================================================
   // MODALIDADES DE ESCANEO
   // =========================================================================
- const iniciarCamara = async () => {
-    setModoEscaneo("cam");
+  const iniciarCamara = async () => {
     setError(null);
+    setResultado(null);
+    setModoEscaneo("cam");
+    
+    // Asegurar que cualquier instancia previa esté completamente detenida antes de arrancar
+    await detenerCamara();
     setCamaraActiva(true);
+
+    // Configurar temporizador de 10 segundos por si no detecta ningún QR
+    if (timeoutCamaraRef.current) {
+      clearTimeout(timeoutCamaraRef.current);
+    }
+
+    timeoutCamaraRef.current = setTimeout(async () => {
+      if (scannerRef.current) {
+        await detenerCamara();
+        setError("Tiempo agotado: No se detectó ningún código QR válido o el código no es válido.");
+      }
+    }, 10000); // 10 segundos
 
     setTimeout(async () => {
       try {
         const html5QrCode = new Html5Qrcode("reader-camera");
         scannerRef.current = html5QrCode;
 
+        const esCelular = window.innerWidth < 768;
+        const tamañoQr = esCelular ? { width: 280, height: 280 } : { width: 220, height: 220 };
+
         await html5QrCode.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          { fps: 15, qrbox: tamañoQr },
           (decodedText) => {
+            if (timeoutCamaraRef.current) clearTimeout(timeoutCamaraRef.current);
             extraerYProcesarUrl(decodedText);
           },
           () => {}
@@ -163,17 +188,27 @@ export const VerificadorBoletinProfesor = () => {
         console.error("Error al acceder a la cámara:", err);
         setError("No se pudo acceder a la cámara. Permite el acceso e intenta nuevamente.");
         setCamaraActiva(false);
+        if (timeoutCamaraRef.current) clearTimeout(timeoutCamaraRef.current);
       }
     }, 300);
   };
 
   const detenerCamara = async () => {
-    if (scannerRef.current && scannerRef.current.isScanning) {
+    if (timeoutCamaraRef.current) {
+      clearTimeout(timeoutCamaraRef.current);
+      timeoutCamaraRef.current = null;
+    }
+
+    if (scannerRef.current) {
       try {
-        await scannerRef.current.stop();
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
         scannerRef.current.clear();
       } catch (err) {
-        console.error("Error al detener cámara:", err);
+        console.error("Error al detener o limpiar la cámara:", err);
+      } finally {
+        scannerRef.current = null;
       }
     }
     setCamaraActiva(false);
@@ -279,8 +314,8 @@ export const VerificadorBoletinProfesor = () => {
               {/* SELECTOR DE PESTAÑAS CLARO */}
               <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 bg-slate-100 border border-slate-200 rounded-xl mb-6">
                 <button
-                  onClick={() => {
-                    detenerCamara();
+                  onClick={async () => {
+                    await detenerCamara();
                     setModoEscaneo("qr_file");
                   }}
                   className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-2 sm:px-3 rounded-lg text-[11px] sm:text-xs font-semibold transition-all ${
@@ -293,8 +328,8 @@ export const VerificadorBoletinProfesor = () => {
                 </button>
 
                 <button
-                  onClick={() => {
-                    detenerCamara();
+                  onClick={async () => {
+                    await detenerCamara();
                     setModoEscaneo("pdf_file");
                   }}
                   className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-2 sm:px-3 rounded-lg text-[11px] sm:text-xs font-semibold transition-all ${
@@ -357,7 +392,7 @@ export const VerificadorBoletinProfesor = () => {
               )}
 
               {/* MODO 3: CÁMARA */}
-           {modoEscaneo === "cam" && (
+              {modoEscaneo === "cam" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-2">
                   <div className="w-full max-w-sm sm:max-w-md overflow-hidden rounded-2xl border-2 border-blue-400 bg-slate-900 relative shadow-md">
                     
@@ -367,7 +402,7 @@ export const VerificadorBoletinProfesor = () => {
                       #reader-camera video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
                     `}</style>
 
-                    {/* h-80 para celular (más grande) y sm:h-64 para PC (como estaba antes) */}
+                    {/* h-80 para celular (más grande) y sm:h-64 para PC */}
                     <div id="reader-camera" className="w-full h-80 sm:h-64" />
 
                     {!camaraActiva && (
@@ -408,6 +443,7 @@ export const VerificadorBoletinProfesor = () => {
                     setError(null);
                     setResultado(null);
                     setFotoUrl("");
+                    iniciarCamara(); // Vuelve a encender la cámara automáticamente al intentar de nuevo
                   }}
                   className="mt-4 px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold transition-colors"
                 >
@@ -518,6 +554,7 @@ export const VerificadorBoletinProfesor = () => {
                     setResultado(null);
                     setError(null);
                     setFotoUrl("");
+                    iniciarCamara(); // Vuelve a encender la cámara de inmediato para otro escaneo
                   }}
                   className="px-5 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-xl text-xs transition-colors text-center"
                 >
