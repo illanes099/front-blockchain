@@ -138,8 +138,7 @@ export const VerificadorBoletin = () => {
     }
   };
 
-  
- // =========================================================================
+  // =========================================================================
   // MODALIDADES DE ESCANEO
   // =========================================================================
  const iniciarCamara = async () => {
@@ -154,13 +153,7 @@ export const VerificadorBoletin = () => {
 
         await html5QrCode.start(
           { facingMode: "environment" },
-          { 
-            fps: 10, 
-            // Usamos un qrbox fluido o transparente mediante CSS de la librería, 
-            // o lo ajustamos proporcionalmente para que no sobresalga en PC
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0
-          }, 
+          { fps: 10, qrbox: { width: 250, height: 250 } },
           (decodedText) => {
             extraerYProcesarUrl(decodedText);
           },
@@ -366,17 +359,17 @@ export const VerificadorBoletin = () => {
               {/* MODO 3: CÁMARA */}
               {modoEscaneo === "cam" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-2">
-                  <div className="w-full max-w-md overflow-hidden rounded-2xl border-2 border-blue-400 bg-slate-900 relative shadow-md">
+                  <div className="w-full max-w-sm sm:max-w-md overflow-hidden rounded-2xl border-2 border-blue-400 bg-slate-900 relative shadow-md">
                     
-                    {/* Estilo local para asegurar que la cámara ocupe todo el contenedor sin recuadros ni sombras */}
+                    {/* Estilo local para eliminar el recuadro blanco de enfoque */}
                     <style>{`
                       #qr-shaded-region { display: none !important; }
                       #reader-camera video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
                     `}</style>
 
-                    {/* Contenedor estandarizado para PC y Celular */}
-                    <div id="reader-camera" className="w-full h-80 sm:h-96" />
-                    
+                    {/* h-80 para celular (más grande) y sm:h-64 para PC (como estaba antes) */}
+                    <div id="reader-camera" className="w-full h-80 sm:h-64" />
+
                     {!camaraActiva && (
                       <div className="absolute inset-0 bg-slate-100 flex flex-col items-center justify-center text-xs text-slate-500 p-4 text-center">
                         <Camera className="mb-2 text-slate-400" size={32} />
