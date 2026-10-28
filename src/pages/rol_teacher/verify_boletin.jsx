@@ -155,7 +155,10 @@ const iniciarCamara = async () => {
           { facingMode: "environment" },
           { 
             fps: 10, 
-            qrbox: { width: 350, height: 350 } // <--- Aumentado a 350 para que escanee más amplio
+            // Usamos un qrbox fluido o transparente mediante CSS de la librería, 
+            // o lo ajustamos proporcionalmente para que no sobresalga en PC
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0
           }, 
           (decodedText) => {
             extraerYProcesarUrl(decodedText);
@@ -360,12 +363,12 @@ const iniciarCamara = async () => {
               )}
 
               {/* MODO 3: CÁMARA */}
-            {modoEscaneo === "cam" && (
+           {modoEscaneo === "cam" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-2">
-                  <div className="w-full max-w-lg overflow-hidden rounded-2xl border-2 border-blue-400 bg-slate-900 relative shadow-md">
+                  <div className="w-full max-w-md overflow-hidden rounded-2xl border-2 border-blue-400 bg-slate-900 relative shadow-md">
                     
-                    {/* CAMBIADO AQUÍ: Altura mayor para que ocupe casi toda la vista en celular */}
-                    <div id="reader-camera" className="w-full h-[450px] sm:h-[500px]" />
+                    {/* Contenedor estandarizado para PC y Celular */}
+                    <div id="reader-camera" className="w-full h-80 sm:h-96" />
                     
                     {!camaraActiva && (
                       <div className="absolute inset-0 bg-slate-100 flex flex-col items-center justify-center text-xs text-slate-500 p-4 text-center">
