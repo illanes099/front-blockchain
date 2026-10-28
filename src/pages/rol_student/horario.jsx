@@ -66,7 +66,7 @@ export const HorarioStudent = () => {
 
         // 4. Consultar los horarios usando el id del estudiante
         // const resHorario = await axios.get(`http://localhost:20000/horarios/estudiante/${estObj.estudiante_id}`);
-        const resHorario = await axios.get(`https://back-blockchain-88mqq4sf4-illanes.vercel.app/horarios/estudiante/${estObj.estudiante_id}`);
+        const resHorario = await axios.get(`https://back-blockchain.vercel.app/horarios/estudiante/${estObj.estudiante_id}`);
         setHorariosBD(resHorario.data || []);
       } catch (err) {
         console.error("Error al cargar horario del estudiante:", err);
