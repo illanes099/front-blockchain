@@ -363,10 +363,17 @@ const iniciarCamara = async () => {
               )}
 
               {/* MODO 3: CÁMARA */}
-           {modoEscaneo === "cam" && (
+           
+              {modoEscaneo === "cam" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-2">
                   <div className="w-full max-w-md overflow-hidden rounded-2xl border-2 border-blue-400 bg-slate-900 relative shadow-md">
                     
+                    {/* Estilo local para asegurar que la cámara ocupe todo el contenedor sin recuadros ni sombras */}
+                    <style>{`
+                      #qr-shaded-region { display: none !important; }
+                      #reader-camera video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
+                    `}</style>
+
                     {/* Contenedor estandarizado para PC y Celular */}
                     <div id="reader-camera" className="w-full h-80 sm:h-96" />
                     
@@ -382,8 +389,6 @@ const iniciarCamara = async () => {
                   </p>
                 </motion.div>
               )}
-            </div>
-          )}
 
           {/* INDICADOR DE CARGA */}
           {loading && (
