@@ -153,7 +153,10 @@ const iniciarCamara = async () => {
 
         await html5QrCode.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 300, height: 300 } }, // Cuadro QR más grande
+          { 
+            fps: 10, 
+            qrbox: { width: 350, height: 350 } // <--- Aumentado a 350 para que escanee más amplio
+          }, 
           (decodedText) => {
             extraerYProcesarUrl(decodedText);
           },
@@ -357,11 +360,13 @@ const iniciarCamara = async () => {
               )}
 
               {/* MODO 3: CÁMARA */}
-              {modoEscaneo === "cam" && (
+            {modoEscaneo === "cam" && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center py-2">
-                  <div className="w-full max-w-md overflow-hidden rounded-2xl border-2 border-blue-400 bg-slate-900 relative shadow-md">
-                    {/* Contenedor de cámara con altura ampliada para móviles */}
-                    <div id="reader-camera" className="w-full h-72 sm:h-96" />
+                  <div className="w-full max-w-lg overflow-hidden rounded-2xl border-2 border-blue-400 bg-slate-900 relative shadow-md">
+                    
+                    {/* CAMBIADO AQUÍ: Altura mayor para que ocupe casi toda la vista en celular */}
+                    <div id="reader-camera" className="w-full h-[450px] sm:h-[500px]" />
+                    
                     {!camaraActiva && (
                       <div className="absolute inset-0 bg-slate-100 flex flex-col items-center justify-center text-xs text-slate-500 p-4 text-center">
                         <Camera className="mb-2 text-slate-400" size={32} />
