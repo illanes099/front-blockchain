@@ -2,7 +2,7 @@ import axios from "axios";
 
 const api = axios.create({
   // baseURL: "http://localhost:20000/usuarios",
-  baseURL: "back-blockchain-88mqq4sf4-illanes.vercel.app/usuarios",
+  baseURL: "https://back-blockchain-88mqq4sf4-illanes.vercel.app/usuarios",
   headers: {
     "Content-Type": "application/json",
   },
