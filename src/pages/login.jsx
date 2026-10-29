@@ -257,7 +257,7 @@ export const SchoolLogin = () => {
                   </>
                 ) : (
                   <>
-                    <span>Acceder al Portal</span>
+                    <span>Ingresar</span>
                     <ArrowRight size={18} />
                   </>
                 )}
