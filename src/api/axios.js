@@ -2,8 +2,8 @@ import axios from "axios";
 
 // Instancia centralizada de Axios
 const api = axios.create({
-  baseURL: "http://localhost:20000",
-  // baseURL: "https://back-blockchain.vercel.app",
+  // baseURL: "http://localhost:20000",
+  baseURL: "https://back-blockchain.vercel.app",
   headers: {
     "Content-Type": "application/json",
   },

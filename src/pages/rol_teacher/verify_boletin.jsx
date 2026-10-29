@@ -83,7 +83,7 @@ const esErrorDePermiso = (err) => /NotAllowed|Permission|denied/i.test(String(er
 
 const mensajeErrorCamara = (err) => {
   if (typeof window !== "undefined" && (!window.isSecureContext || !navigator.mediaDevices)) {
-    return "La cámara solo funciona en conexión segura. Abre el portal con https:// (o desde localhost).";
+    return "conecta una camara al dispositivo";
   }
   const txt = String(err?.name || err?.message || err || "");
   if (/NotAllowed|Permission|denied/i.test(txt)) {

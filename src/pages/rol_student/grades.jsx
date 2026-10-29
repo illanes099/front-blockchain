@@ -564,8 +564,8 @@ export const Calificaciones = () => {
     // Código QR
     currentY += 20;
 
-    const urlVerificacionLocal = `http://localhost:5173/verificar?hash=${hashReal}`;
-    // const urlVerificacionLocal = `https://boletines-daza.pages.dev/verificar?hash=${hashReal}`;
+    // const urlVerificacionLocal = `http://localhost:5173/verificar?hash=${hashReal}`;
+    const urlVerificacionLocal = `https://boletines-daza.pages.dev/verificar?hash=${hashReal}`;
     const textoContenidoQR = 
 `Colegio: ${COLEGIO_NOMBRE}
 Estudiante: ${nombreCompleto}
