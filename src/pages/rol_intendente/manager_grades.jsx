@@ -1433,7 +1433,7 @@ export const GestionCalificacionesDirector = () => {
                         onChange={handleChange}
                         required
                         placeholder="Ej. Toro"
-                        className="w-full p-2.5 rounded-md bg-white border border-slate-300 text-slate-800 text-sm focus:ring-2 focus:ring-blue-400/50 outline-none"
+                        className="w-full p-2.5 rounded-md bg-white border  border-slate-300 text-slate-800 text-sm focus:ring-2 focus:ring-blue-400/50 outline-none"
                       />
                     </div>
 
