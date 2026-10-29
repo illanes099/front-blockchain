@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, GraduationCap } from "lucide-react";
+import { User, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle } from "lucide-react";
 import { login } from "../services/authServices";
 import { useNavigate } from "react-router-dom";
 
@@ -124,9 +124,9 @@ export const SchoolLogin = () => {
         className="w-full max-w-5xl rounded-3xl overflow-hidden grid grid-cols-1 md:grid-cols-12 relative z-10 border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] backdrop-blur-xl bg-slate-900/30"
       >
         {/* ========================================================= */}
-        {/* SECCIÓN IZQUIERDA: LOGO Y BIENVENIDA                        */}
+        {/* SECCIÓN IZQUIERDA: LOGO Y BIENVENIDA (OCULTA EN MÓVILES)   */}
         {/* ========================================================= */}
-        <div className="md:col-span-5 p-8 sm:p-12 flex flex-col items-center text-center justify-center relative overflow-hidden bg-gradient-to-b from-blue-900/40 to-slate-900/60 border-b md:border-b-0 md:border-r border-white/10">
+        <div className="hidden md:flex md:col-span-5 p-8 sm:p-12 flex-col items-center text-center justify-center relative overflow-hidden bg-gradient-to-b from-blue-900/40 to-slate-900/60 border-b md:border-b-0 md:border-r border-white/10">
           
           {/* Logo del colegio en grande */}
           <motion.div
@@ -160,9 +160,9 @@ export const SchoolLogin = () => {
         </div>
 
         {/* ========================================================= */}
-        {/* SECCIÓN DERECHA: FORMULARIO "MEDIO ESCURO"                */}
+        {/* SECCIÓN DERECHA: FORMULARIO                                */}
         {/* ========================================================= */}
-        <div className="md:col-span-7 bg-slate-950/60 p-8 sm:p-12 flex flex-col justify-center relative">
+        <div className="col-span-1 md:col-span-7 bg-slate-950/60 p-8 sm:p-12 flex flex-col justify-center relative">
           
           <div className="mb-8">
             <h2 className="text-xl sm:text-2xl font-bold text-white tracking-wide">
