@@ -31,6 +31,7 @@ import { GestionCalificacionesDirector } from "./pages/rol_intendente/manager_gr
 import { VerificadorBoletin } from "./pages/rol_intendente/verify_boletin.jsx";
 import { VerificadorBoletinProfesor } from "./pages/rol_teacher/verify_boletin.jsx";
 import { GestionParalelos } from "./pages/rol_intendente/maneger_paralelos.jsx";
+import { GestionGestiones } from "./pages/rol_intendente/GestionGestiones.jsx";
 
 
 function App() {
@@ -81,6 +82,7 @@ function App() {
               <Route path="grades-intendente" element={<GestionCalificacionesDirector />} />
               <Route path="verify-voletin" element={<VerificadorBoletin />} />
               <Route path="paralelos" element={<GestionParalelos />} />
+              <Route path="gestiones-academicas" element={<GestionGestiones />} />
             </Route>
           </Route>
         </Routes>

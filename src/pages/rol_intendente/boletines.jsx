@@ -8,21 +8,15 @@ import {
   Download,
   GraduationCap,
   ShieldCheck,
-  Award,
-  Users,
   AlertCircle,
-  FileCheck,
-  CheckCircle2,
   Filter,
   QrCode,
   Layers,
   Stamp,
   Loader2,
-  FileBadge,
   CheckCircle,
   Info,
-  X,
-  FileText
+  X
 } from "lucide-react";
 
 import { getCalificaciones } from "../../api/api.calificaciones";
@@ -30,20 +24,56 @@ import { getEstudiantes } from "../../api/api.estudiante";
 import { getUsuarios } from "../../api/api.usuario";
 import { getParalelos } from "../../api/api.paralelos";
 import { getMaterias } from "../../api/api.materia";
-import { certificarBoletin, verificarCertificado } from "../../api/api.blockchain";
+import { getGestiones } from "../../api/api.gestion";
+import { certificarBoletin } from "../../api/api.blockchain";
 
 /* ============================================================
    TOKENS DE DISEÑO — PALETA OFICIAL DIPLOMA Y CERTIFICACIÓN
    ============================================================ */
 const INK = {
   navy: [15, 42, 74],
-  navy2: [30, 58, 95],
   gold: [184, 149, 46],
   ink: [28, 43, 58],
   slate: [91, 107, 124],
   paper: [251, 249, 244],
   red: [178, 34, 34],
   emerald: [6, 95, 70],
+};
+
+// ================== HELPER: CONVERSIÓN DE NÚMERO A LITERAL (SIN 00/100) ==================
+const numeroALiteral = (num) => {
+  const n = Number(num);
+  if (isNaN(n) || n === 0) return "CERO";
+  
+  const unidades = ["", "UN", "DOS", "TRES", "CUATRO", "CINCO", "SEIS", "SIETE", "OCHO", "NUEVE"];
+  const decenas = ["", "DIEZ", "VEINTE", "TREINTA", "CUARENTA", "CINCUENTA", "SESENTA", "SETENTA", "OCHENTA", "NOVENTA"];
+  const especiales = {
+    11: "ONCE", 12: "DOCE", 13: "TRECE", 14: "CATORCE", 15: "QUINCE",
+    16: "DIECISEIS", 17: "DIECISIETE", 18: "DIECIOCHO", 19: "DIECINUEVE",
+    21: "VEINTIUNO", 22: "VEINTIDOS", 23: "VEINTITRES", 24: "VEINTICUATRO", 25: "VEINTICINCO",
+    26: "VEINTISEIS", 27: "VEINTISIETE", 28: "VEINTIOCHO", 29: "VEINTINUEVE"
+  };
+
+  let entero = Math.floor(n);
+  if (entero === 100) return "CIEN";
+
+  let literal = "";
+  if (entero >= 21 && entero <= 29) {
+    literal = especiales[entero];
+  } else if (especiales[entero]) {
+    literal = especiales[entero];
+  } else {
+    let d = Math.floor(entero / 10);
+    let u = entero % 10;
+    if (d > 0) {
+      literal = decenas[d];
+      if (u > 0) literal += " Y " + unidades[u];
+    } else {
+      literal = unidades[u];
+    }
+  }
+
+  return literal;
 };
 
 // Helper para convertir URL de imagen o Canvas a Base64 de forma asíncrona
@@ -64,7 +94,7 @@ const cargarImagenBase64 = (url) => {
   });
 };
 
-// Genera el código QR institucional con el logo incrustado y placa protectora al centro
+// Genera el código QR institucional con el logo incrustado
 const generarQRConLogo = (texto, logoUrl) => {
   return new Promise((resolve) => {
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&ecc=H&color=15-42-74&data=${encodeURIComponent(
@@ -133,11 +163,8 @@ export const Boletines = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [certificandoId, setCertificandoId] = useState(null);
+  const [generandoMasivo, setGenerandoMasivo] = useState(false);
 
-  // Contador de boletines emitidos/verificados durante la sesión
-  const [boletinesEmitidos, setBoletinesEmitidos] = useState(0);
-
-  // Estado para controlar la visibilidad e información del Modal
   const [modalInfo, setModalInfo] = useState(null);
 
   const [filter, setFilter] = useState({
@@ -146,7 +173,7 @@ export const Boletines = () => {
     materia: "",
   });
 
-  // ================== CARGA Y ASOCIACIÓN DE DATOS ==================
+  // ================== CARGA Y ASOCIACIÓN DE DATOS CON GESTIÓN ACTIVA ==================
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -154,18 +181,27 @@ export const Boletines = () => {
         setError(null);
 
         const [
+          resGestiones,
           resUsuarios,
           dataEstudiantes,
           dataParalelos,
           dataMaterias,
           dataCalificaciones,
         ] = await Promise.all([
+          getGestiones(),
           getUsuarios(),
           getEstudiantes(),
           getParalelos(),
           getMaterias(),
           getCalificaciones(),
         ]);
+
+        const gestionesList = Array.isArray(resGestiones) ? resGestiones : (resGestiones?.data || []);
+        const aniosActivos = new Set(
+          gestionesList
+            .filter((g) => g.token_activated === "t" || g.token_activated === true)
+            .map((g) => String(g.gestion))
+        );
 
         const usuarios = (resUsuarios.data || resUsuarios || []).filter(
           (u) => u.rol && u.rol.toLowerCase() === "estudiante"
@@ -182,9 +218,13 @@ export const Boletines = () => {
         const mapParaleloById = new Map(paralelos.map((p) => [p.paralelo_id, p.descripcion]));
         const mapMateriaById = new Map(materias.map((m) => [m.materia_id, m.nombre]));
 
-        // Agrupar asignaturas por estudiante
         const mapMateriasPorEst = new Map();
         calificaciones.forEach((c) => {
+          if (aniosActivos.size > 0 && c.fecha) {
+            const anioCalif = String(c.fecha).slice(0, 4);
+            if (!aniosActivos.has(anioCalif)) return;
+          }
+
           const estId = c.estudiante_id;
           const materiaNombre = mapMateriaById.get(c.materia_id) || `Materia ${c.materia_id}`;
 
@@ -209,13 +249,17 @@ export const Boletines = () => {
           const user = mapUsuarioById.get(est.usuario_id);
           if (!user) return;
 
+          if (aniosActivos.size > 0 && user.fecha_creacion) {
+            const anioUser = String(user.fecha_creacion).slice(0, 4);
+            if (!aniosActivos.has(anioUser)) return;
+          }
+
           const materiasEst = mapMateriasPorEst.get(est.estudiante_id) || [];
           if (materiasEst.length === 0) return;
 
           const nombreCompleto = `${user.nombre || ""} ${user.apellido || ""}`.trim();
           const paraleloDesc = mapParaleloById.get(est.paralelo_id) || `Paralelo ${est.paralelo_id}`;
 
-          // Procesamiento dinámico de imagen de perfil de la BD
           let fotoUrl = "";
           const fotoBD = est.foto || user.foto;
           if (fotoBD) {
@@ -279,7 +323,7 @@ export const Boletines = () => {
       .filter((e) => e.materias.length > 0);
   }, [estudiantesData, filter]);
 
-  // ================== EMISIÓN DE BOLETÍN Y NÚCLEO DE GENERACIÓN ==================
+  // ================== EMISIÓN Y CERTIFICACIÓN BLOCKCHAIN ==================
   const procesarEmisionBoletin = async (estudiante) => {
     try {
       setCertificandoId(estudiante.id);
@@ -290,7 +334,6 @@ export const Boletines = () => {
         materias: estudiante.materias,
       };
 
-      // Solicitamos la certificación al backend Node.js
       const resBlockchain = await certificarBoletin(datosParaCertificar);
       const hashReal = resBlockchain.hash;
 
@@ -298,9 +341,6 @@ export const Boletines = () => {
         throw new Error("El servidor no retornó una firma digital criptográfica válida.");
       }
 
-      setBoletinesEmitidos((prev) => prev + 1);
-
-      // Desplegar Modal informando si es nuevo o si ya existía previamente
       setModalInfo({
         estudiante,
         hashReal,
@@ -318,7 +358,38 @@ export const Boletines = () => {
     }
   };
 
-  // Función que construye y descarga el archivo PDF
+  // ================== GENERACIÓN MASIVA (DE GOLPE) ==================
+  const generarBoletinesMasivos = async () => {
+    if (filteredEstudiantes.length === 0) {
+      alert("No hay estudiantes filtrados para generar boletines masivos.");
+      return;
+    }
+
+    try {
+      setGenerandoMasivo(true);
+      for (const est of filteredEstudiantes) {
+        const datosParaCertificar = {
+          estudianteId: est.id,
+          paralelo: est.paralelo,
+          materias: est.materias,
+        };
+
+        const resBlockchain = await certificarBoletin(datosParaCertificar);
+        const hashReal = resBlockchain.hash || "HASH_BLOCKCHAIN_MASIVO";
+
+        await descargarPDFOficial(est, hashReal);
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      alert(`Se generaron y descargaron ${filteredEstudiantes.length} boletines correctamente.`);
+    } catch (err) {
+      console.error("Error en generación masiva:", err);
+      alert("Ocurrió un error durante la generación masiva de boletines.");
+    } finally {
+      setGenerandoMasivo(false);
+    }
+  };
+
+  // ================== GENERACIÓN DE PDF INSTITUCIONAL ==================
   const descargarPDFOficial = async (estudiante, hashReal) => {
     try {
       const doc = new jsPDF({
@@ -334,7 +405,7 @@ export const Boletines = () => {
 
       const logoBase64 = await cargarImagenBase64("/logo.png");
 
-      // ================== MARCO DE SEGURIDAD ==================
+      // Marco Institucional
       const frameOuter = 6;
       const frameInner = 8.6;
       doc.setDrawColor(...INK.navy);
@@ -344,58 +415,6 @@ export const Boletines = () => {
       doc.setLineWidth(0.3);
       doc.rect(frameInner, frameInner, pageWidth - frameInner * 2, pageHeight - frameInner * 2);
 
-      doc.setDrawColor(...INK.gold);
-      doc.setLineWidth(0.15);
-      for (let x = frameInner + 4; x < pageWidth - frameInner - 4; x += 4) {
-        doc.line(x, frameInner, x, frameInner + 1.3);
-        doc.line(x, pageHeight - frameInner, x, pageHeight - frameInner - 1.3);
-      }
-
-      // ================== MARCAS DE AGUA ==================
-      if (logoBase64) {
-        try {
-          doc.saveGraphicsState();
-          if (doc.setGState) {
-            doc.setGState(new doc.GState({ opacity: 0.045 }));
-          }
-          const wmSize = 34;
-          const stepX = 52;
-          const stepY = 62;
-          let rowOffset = 0;
-          for (let y = -10; y < pageHeight + 20; y += stepY) {
-            for (let x = -10 + rowOffset; x < pageWidth + 20; x += stepX) {
-              try {
-                doc.addImage(logoBase64, "PNG", x, y, wmSize, wmSize, undefined, undefined, 28);
-              } catch {
-                doc.addImage(logoBase64, "PNG", x, y, wmSize, wmSize);
-              }
-            }
-            rowOffset = rowOffset === 0 ? stepX / 2 : 0;
-          }
-          doc.restoreGraphicsState();
-        } catch (err) {
-          console.error("Error aplicando marcas de agua:", err);
-        }
-      }
-
-      if (logoBase64) {
-        try {
-          doc.saveGraphicsState();
-          if (doc.setGState) doc.setGState(new doc.GState({ opacity: 0.06 }));
-          const bigSize = 120;
-          doc.addImage(
-            logoBase64,
-            "PNG",
-            (pageWidth - bigSize) / 2,
-            (pageHeight - bigSize) / 2,
-            bigSize,
-            bigSize
-          );
-          doc.restoreGraphicsState();
-        } catch {}
-      }
-
-      // ================== ENCABEZADO INSTITUCIONAL ==================
       let currentY = 20;
 
       if (logoBase64) {
@@ -446,20 +465,14 @@ export const Boletines = () => {
       doc.setLineWidth(0.6);
       doc.line(margin, rt, pageWidth / 2 - 4, rt);
       doc.line(pageWidth / 2 + 4, rt, pageWidth - margin, rt);
-      doc.setFillColor(...INK.gold);
-      doc.triangle(pageWidth / 2 - 2, rt, pageWidth / 2 + 2, rt, pageWidth / 2, rt - 2.2, "F");
-      doc.triangle(pageWidth / 2 - 2, rt, pageWidth / 2 + 2, rt, pageWidth / 2, rt + 2.2, "F");
 
-      // ================== FICHA TÉCNICA DEL ESTUDIANTE ==================
+      // Ficha del Estudiante
       currentY += 7;
       const cardHeight = 24;
       doc.setFillColor(...INK.paper);
       doc.setDrawColor(...INK.navy);
       doc.setLineWidth(0.35);
       doc.roundedRect(margin, currentY, contentWidth, cardHeight, 1.5, 1.5, "FD");
-      doc.setDrawColor(...INK.gold);
-      doc.setLineWidth(0.25);
-      doc.roundedRect(margin + 1, currentY + 1, contentWidth - 2, cardHeight - 2, 1, 1);
 
       let textStartX = margin + 8;
       if (estudiante.foto) {
@@ -484,25 +497,9 @@ export const Boletines = () => {
       doc.setTextColor(...INK.slate);
       doc.text(`Paralelo / Curso:  ${estudiante.paralelo}`, textStartX, currentY + 16);
 
-      // Sello circular
-      const sealCx = pageWidth - margin - 16;
-      const sealCy = currentY + cardHeight / 2;
-      doc.setDrawColor(...INK.emerald);
-      doc.setLineWidth(0.5);
-      doc.circle(sealCx, sealCy, 9.2);
-      doc.setLineWidth(0.2);
-      doc.circle(sealCx, sealCy, 7.6);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(5.4);
-      doc.setTextColor(...INK.emerald);
-      doc.text("VERIFICADO", sealCx, sealCy - 1.6, { align: "center" });
-      doc.text("BLOCKCHAIN", sealCx, sealCy + 1.4, { align: "center" });
-      doc.setFontSize(4.6);
-      doc.text("★", sealCx, sealCy + 4.6, { align: "center" });
-
       currentY += cardHeight + 7;
 
-      // ================== TABLA DE NOTAS ==================
+      // Tabla de Notas (sin literal en celdas individuales)
       const tableColumn = ["ASIGNATURA / MATERIA", "1ER TRIM.", "2DO TRIM.", "3ER TRIM.", "PROMEDIO FINAL"];
       const tableRows = [];
       let sumaPromedios = 0;
@@ -511,6 +508,7 @@ export const Boletines = () => {
         const promCalculado = Number(((m.trimestre1 + m.trimestre2 + m.trimestre3) / 3).toFixed(2));
         const notaFinal = m.total > 0 ? m.total : promCalculado;
         sumaPromedios += notaFinal;
+
         tableRows.push([
           m.materia.toUpperCase(),
           m.trimestre1 || "0",
@@ -554,19 +552,9 @@ export const Boletines = () => {
           4: { cellWidth: 29.9, fontStyle: "bold", textColor: INK.navy },
         },
         alternateRowStyles: { fillColor: [247, 244, 235] },
-        didDrawPage: (data) => {
-          doc.setDrawColor(...INK.gold);
-          doc.setLineWidth(0.5);
-          doc.line(
-            margin,
-            data.table.head[0].cells[0].y + data.table.head[0].height,
-            pageWidth - margin,
-            data.table.head[0].cells[0].y + data.table.head[0].height
-          );
-        },
       });
 
-      // ================== RESUMEN ==================
+      // Cuadro de Resumen General + Estatus (ABANDONO / REPROBADO / APROBADO)
       currentY = (doc.lastAutoTable?.finalY || currentY + 50) + 5;
 
       doc.setFillColor(...INK.navy);
@@ -575,33 +563,35 @@ export const Boletines = () => {
       doc.rect(margin, currentY, 2.2, 13, "F");
 
       doc.setFont("times", "bold");
-      doc.setFontSize(9.5);
+      doc.setFontSize(9);
       doc.setTextColor(250, 248, 242);
-      doc.text(`PROMEDIO GENERAL:  ${promedioGeneralEstudiante} / 100 pts`, margin + 7, currentY + 8.2);
+      doc.text(
+        `PROMEDIO GENERAL:  ${promedioGeneralEstudiante} / 100 pts (${numeroALiteral(promedioGeneralEstudiante)})`,
+        margin + 7,
+        currentY + 8.2
+      );
 
       const condicion =
-        promedioGeneralEstudiante >= 85
-          ? "SOBRESALIENTE"
-          : promedioGeneralEstudiante >= 70
-          ? "APROBADO"
-          : "EN RIESGO ACADÉMICO";
+        promedioGeneralEstudiante === 0
+          ? "ABANDONO"
+          : promedioGeneralEstudiante < 51
+          ? "REPROBADO"
+          : "APROBADO";
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
       doc.setTextColor(
-        condicion === "EN RIESGO ACADÉMICO" ? 248 : 212,
-        condicion === "EN RIESGO ACADÉMICO" ? 180 : 195,
-        condicion === "EN RIESGO ACADÉMICO" ? 170 : 130
+        condicion === "ABANDONO" ? 220 : condicion === "REPROBADO" ? 248 : 212,
+        condicion === "ABANDONO" ? 38 : condicion === "REPROBADO" ? 180 : 195,
+        condicion === "ABANDONO" ? 38 : condicion === "REPROBADO" ? 170 : 130
       );
-      doc.text(`ESTATUS ACADÉMICO:  ${condicion}`, pageWidth - margin - 7, currentY + 8.2, { align: "right" });
+      doc.text(`ESTATUS:  ${condicion}`, pageWidth - margin - 7, currentY + 8.2, { align: "right" });
 
-      // ================== CÓDIGO QR Y FIRMA ==================
+      // Sección Blockchain y QR
       currentY += 20;
-
       // const urlVerificacion = `http://localhost:5173/verificar?hash=${hashReal}`;
       const urlVerificacion = `https://boletines-daza.pages.dev/verificar?hash=${hashReal}`;
       const textoContenidoQR = `Institución: ${colegioNombre}\nEstudiante: ${estudiante.nombre}\nVerificación: ${urlVerificacion}`;
-
       const qrBase64 = await generarQRConLogo(textoContenidoQR, "/logo.png");
 
       const qrBoxHeight = 34;
@@ -629,19 +619,13 @@ export const Boletines = () => {
       doc.text("Certificación digital con inmutabilidad de datos registrada en Blockchain.", securityTextX, currentY + 13.5);
       doc.text("Escanee el código para validar la autenticidad de este boletín.", securityTextX, currentY + 17.8);
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      doc.setTextColor(...INK.red);
-      doc.text("PROHIBIDO SU PLAGIO O ALTERACIÓN — cualquier modificación invalida el documento.", securityTextX, currentY + 23.5);
-
       doc.setFont("courier", "normal");
       doc.setFontSize(6.3);
       doc.setTextColor(...INK.slate);
       doc.text(`HASH: ${hashReal}`, securityTextX, currentY + 29);
 
-      // ================== FIRMAS ==================
+      // Firmas
       currentY += qrBoxHeight + 18;
-
       const lineLength = 52;
       const leftSignatureX = margin + contentWidth / 4 - lineLength / 2;
       const rightSignatureX = margin + (3 * contentWidth) / 4 - lineLength / 2;
@@ -656,22 +640,6 @@ export const Boletines = () => {
       doc.setTextColor(...INK.navy);
       doc.text("DIRECCIÓN GENERAL", leftSignatureX + lineLength / 2, currentY + 5, { align: "center" });
       doc.text("SECRETARÍA ACADÉMICA", rightSignatureX + lineLength / 2, currentY + 5, { align: "center" });
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.8);
-      doc.setTextColor(...INK.slate);
-      doc.text("Sello y Firma Oficial", leftSignatureX + lineLength / 2, currentY + 9, { align: "center" });
-      doc.text("Firma de Conformidad", rightSignatureX + lineLength / 2, currentY + 9, { align: "center" });
-
-      doc.setFont("times", "italic");
-      doc.setFontSize(7);
-      doc.setTextColor(...INK.slate);
-      doc.text(
-        "Sistema de Gestión Académica Institucional   ·   Documento válido sin enmiendas",
-        pageWidth / 2,
-        pageHeight - 11,
-        { align: "center" }
-      );
 
       doc.save(`boletin_${estudiante.nombre.toLowerCase().replace(/\s+/g, "_")}.pdf`);
     } catch (err) {
@@ -718,14 +686,11 @@ export const Boletines = () => {
     );
   }
 
-  const totalEstudiantes = estudiantesData.length;
-  const paralelosActivos = new Set(estudiantesData.map((e) => e.paralelo)).size;
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#EEF3FC] via-[#E9F0FB] to-[#E3ECFA] text-slate-800 p-3 xs:p-4 sm:p-6 md:p-10 font-sans relative">
       <div className="max-w-7xl mx-auto">
 
-        {/* ENCABEZADO */}
+        {/* ENCABEZADO Y BOTÓN MASIVO */}
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -743,12 +708,28 @@ export const Boletines = () => {
               <h1 className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
                 Boletines Trimestrales
               </h1>
-             
             </div>
           </div>
-        </motion.div>
 
-       
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            disabled={generandoMasivo || filteredEstudiantes.length === 0}
+            onClick={generarBoletinesMasivos}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 disabled:opacity-50 text-white font-semibold rounded-md shadow-sm shadow-emerald-200 px-5 py-2.5 text-xs tracking-wide transition-colors"
+          >
+            {generandoMasivo ? (
+              <>
+                <Loader2 size={15} className="animate-spin" />
+                Generando Masivo…
+              </>
+            ) : (
+              <>
+                <Download size={15} /> Generar Boletines Masivos 
+              </>
+            )}
+          </motion.button>
+        </motion.div>
 
         {/* BARRA DE FILTROS */}
         <motion.div
@@ -834,7 +815,6 @@ export const Boletines = () => {
                 whileHover={{ y: -2 }}
                 className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl shadow-sm overflow-hidden"
               >
-                {/* Cabecera de la tarjeta */}
                 <div className="p-4 sm:p-5 border-b border-slate-200 bg-gradient-to-r from-blue-50/70 to-transparent flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
                     {est.foto ? (
@@ -884,7 +864,7 @@ export const Boletines = () => {
                   </motion.button>
                 </div>
 
-                {/* Tabla de materias */}
+                {/* Tabla Limpia (Sin Literales por Trimestre/Promedio) */}
                 <div className="overflow-x-auto">
                   <table className="min-w-full">
                     <thead className="bg-gradient-to-r from-blue-100/70 to-sky-100/70 text-blue-800 text-xs">
@@ -901,8 +881,7 @@ export const Boletines = () => {
                         const promedioCalculado = (m.trimestre1 + m.trimestre2 + m.trimestre3) / 3;
                         const promedio = Number(promedioCalculado.toFixed(2));
                         const notaFinal = m.total > 0 ? m.total : promedio;
-                        const esSobresaliente = notaFinal >= 85;
-                        const esReprobado = notaFinal < 70;
+                        const esAprobado = notaFinal >= 51;
 
                         return (
                           <tr key={index} className="hover:bg-blue-50/50 transition-colors">
@@ -915,11 +894,9 @@ export const Boletines = () => {
                             <td className="py-3 px-5 text-center">
                               <span
                                 className={`inline-flex items-center justify-center min-w-[3.2rem] px-2.5 py-0.5 rounded font-bold ${
-                                  esSobresaliente
+                                  esAprobado
                                     ? "bg-emerald-100 border border-emerald-300 text-emerald-800"
-                                    : esReprobado
-                                    ? "bg-red-100 border border-red-300 text-red-800"
-                                    : "bg-amber-100 border border-amber-300 text-amber-800"
+                                    : "bg-red-100 border border-red-300 text-red-800"
                                 }`}
                               >
                                 {notaFinal} pts
@@ -938,9 +915,8 @@ export const Boletines = () => {
                           Promedio General
                         </td>
                         <td className="py-2.5 px-5 text-center">
-                          <span className="inline-flex items-center gap-1 text-[13px] font-bold text-blue-800">
-                            <Stamp size={13} className="text-blue-500" />
-                            {Number(
+                          {(() => {
+                            const promGral = Number(
                               (
                                 est.materias.reduce(
                                   (acc, m) =>
@@ -949,9 +925,20 @@ export const Boletines = () => {
                                   0
                                 ) / (est.materias.length || 1)
                               ).toFixed(2)
-                            )}{" "}
-                            pts
-                          </span>
+                            );
+                            return (
+                              <div className="inline-flex flex-col items-center text-[12px] font-bold text-blue-800">
+                                <span className="flex items-center gap-1">
+                                  <Stamp size={13} className="text-blue-500" />
+                                  {promGral} pts
+                                </span>
+                                {/* Único lugar donde aparece el literal en la interfaz */}
+                                <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider">
+                                  ({numeroALiteral(promGral)})
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
                       </tr>
                     </tfoot>
@@ -963,9 +950,7 @@ export const Boletines = () => {
         </motion.div>
       </div>
 
-      {/* ============================================================
-          MODAL INSTITUCIONAL DE CONFIRMACIÓN Y ESTADO BLOCKCHAIN
-          ============================================================ */}
+      {/* MODAL INSTITUCIONAL BLOCKCHAIN */}
       <AnimatePresence>
         {modalInfo && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
@@ -976,7 +961,6 @@ export const Boletines = () => {
               transition={{ duration: 0.2 }}
               className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden"
             >
-              {/* Encabezado del Modal */}
               <div
                 className={`p-5 flex items-center justify-between border-b ${
                   modalInfo.yaExistia
@@ -1016,13 +1000,11 @@ export const Boletines = () => {
                 </button>
               </div>
 
-              {/* Cuerpo del Modal */}
               <div className="p-5 sm:p-6 space-y-4">
                 <p className="text-xs text-slate-600 leading-relaxed">
                   {modalInfo.message}
                 </p>
 
-                {/* Tarjeta con resumen del estudiante */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-center gap-3">
                   {modalInfo.estudiante.foto ? (
                     <img
@@ -1045,7 +1027,6 @@ export const Boletines = () => {
                   </div>
                 </div>
 
-                {/* Bloque con la firma Hash */}
                 <div>
                   <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block mb-1">
                     Firma Hash Criptográfica :
@@ -1056,7 +1037,6 @@ export const Boletines = () => {
                 </div>
               </div>
 
-              {/* Pie del Modal con Botón Entendido / Descargar */}
               <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   onClick={() => {

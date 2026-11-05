@@ -65,6 +65,11 @@ export const SidebarDirector = () => {
       link: "/home-intendente/horarios",
     },
     {
+      name: "Gestiones Académicas",
+      icon: <Calendar size={18} />,
+      link: "/home-intendente/gestiones-academicas",
+    },
+    {
       name: "Reportes",
       icon: <BarChart2 size={18} />,
       link: "/home-intendente/reports",

@@ -28,7 +28,7 @@ import {
 } from "../../api/api.usuario";
 
 import { getParalelos } from "../../api/api.paralelos";
-import { getEstudiantes } from "../../api/api.estudiante";
+import { getEstudiantes,updateStudents } from "../../api/api.estudiante";
 
 // Helper slug para autogenerar username
 function slug(str) {
@@ -284,7 +284,7 @@ export const GestionUsuariosAdmin = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleGuardarEdicion = async () => {
+const handleGuardarEdicion = async () => {
     if (!editId) return;
     if (
       !formUsuario.nombre.trim() ||
@@ -296,18 +296,31 @@ export const GestionUsuariosAdmin = () => {
     }
 
     try {
-      const payload = {
+      const payloadUsuario = {
         nombre: formUsuario.nombre.trim(),
         apellido: formUsuario.apellido.trim(),
         username: formUsuario.username.trim(),
         rol: "estudiante",
-        paralelo_id: formUsuario.paralelo_id ? parseInt(formUsuario.paralelo_id, 10) : null,
       };
 
-      await updateUsuarioById(editId, payload);
+      // 1. Actualizar datos básicos en la tabla usuarios
+      await updateUsuarioById(editId, payloadUsuario);
+
+      // 2. Buscar el registro de estudiante asociado para actualizar su paralelo
+      const estudianteAsociado = estudiantesRaw.find(
+        (e) => Number(e.usuario_id) === Number(editId)
+      );
+
+      if (estudianteAsociado) {
+        // Usamos updateStudents apuntando al estudiante_id correcto
+        await updateStudents(estudianteAsociado.estudiante_id, {
+          paralelo_id: formUsuario.paralelo_id ? parseInt(formUsuario.paralelo_id, 10) : null,
+        });
+      }
+
       await cargarDatos();
       resetFormulario();
-      mostrarModal(true, "Los datos del estudiante se actualizaron correctamente.");
+      mostrarModal(true, "Los datos del estudiante y su paralelo se actualizaron correctamente.");
     } catch (error) {
       console.error(error);
       mostrarModal(false, "Ocurrió un error al actualizar los datos del estudiante.");

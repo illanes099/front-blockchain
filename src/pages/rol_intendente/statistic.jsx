@@ -26,6 +26,9 @@ import {
   AlertCircle,
   GraduationCap,
   Download,
+  UserX,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 import { getCalificacionesMaterias } from "../../api/api.calificaciones";
@@ -149,6 +152,44 @@ export const Estadisticas = () => {
     }));
   }, [calificacionesMaterias, estudiantes, paralelos]);
 
+  // ================== ESTADÍSTICAS DE RENDIMIENTO (APROBADOS / REPROBADOS / ABANDONO) ==================
+  const estadisticasRendimiento = useMemo(() => {
+    if (!calificacionesMaterias.length) return { aprobados: 0, reprobados: 0, abandono: 0, total: 0, porcentajeAprobados: 0, porcentajeReprobados: 0, porcentajeAbandono: 0 };
+
+    let aprobados = 0;
+    let reprobados = 0;
+    let abandono = 0;
+
+    calificacionesMaterias.forEach((c) => {
+      const total = Number(c.total) || 0;
+      // Criterio institucional: Abandono si nota es 0 o indefinida, Reprobado < 51, Aprobado >= 51
+      if (total === 0 && (Number(c.primer_trimestre) || 0) === 0 && (Number(c.segundo_trimestre) || 0) === 0) {
+        abandono++;
+      } else if (total >= 51) {
+        aprobados++;
+      } else {
+        reprobados++;
+      }
+    });
+
+    const total = calificacionesMaterias.length;
+    return {
+      aprobados,
+      reprobados,
+      abandono,
+      total,
+      porcentajeAprobados: total ? ((aprobados / total) * 100).toFixed(1) : 0,
+      porcentajeReprobados: total ? ((reprobados / total) * 100).toFixed(1) : 0,
+      porcentajeAbandono: total ? ((abandono / total) * 100).toFixed(1) : 0,
+    };
+  }, [calificacionesMaterias]);
+
+  const datosRendimientoPie = useMemo(() => [
+    { name: "Aprobados", value: estadisticasRendimiento.aprobados, color: "#059669" },
+    { name: "Reprobados", value: estadisticasRendimiento.reprobados, color: "#DC2626" },
+    { name: "Abandono", value: estadisticasRendimiento.abandono, color: "#D97706" },
+  ], [estadisticasRendimiento]);
+
   // ================== DISTRIBUCIÓN DE ROLES ==================
   const rolesUsuarios = useMemo(() => {
     if (!usuarios.length) return [];
@@ -175,320 +216,314 @@ export const Estadisticas = () => {
 
   const COLORS = ["#2563EB", "#059669", "#D97706", "#DB2777", "#4F46E5"];
 
-  // ================== GENERACIÓN DEL REPORTES EN PDF CON GRÁFICOS ==================
-  
+  /* ============================================================
+     TOKENS DE DISEÑO — PALETA OFICIAL DIPLOMA Y CERTIFICACIÓN
+     ============================================================ */
+  const INK = {
+    navy: [15, 42, 74],
+    navy2: [30, 58, 95],
+    gold: [184, 149, 46],
+    ink: [28, 43, 58],
+    slate: [91, 107, 124],
+    paper: [251, 249, 244],
+    red: [178, 34, 34],
+    emerald: [6, 95, 70],
+  };
 
-/* ============================================================
-   TOKENS DE DISEÑO — PALETA OFICIAL DIPLOMA Y CERTIFICACIÓN
-   ============================================================ */
-const INK = {
-  navy: [15, 42, 74],
-  navy2: [30, 58, 95],
-  gold: [184, 149, 46],
-  ink: [28, 43, 58],
-  slate: [91, 107, 124],
-  paper: [251, 249, 244],
-  red: [178, 34, 34],
-  emerald: [6, 95, 70],
-};
+  const COLEGIO_NOMBRE = "UNIDAD EDUCATIVA ROBERTO ALVARADO DAZA 'B'";
 
-const COLEGIO_NOMBRE = "UNIDAD EDUCATIVA ROBERTO ALVARADO DAZA 'B'";
-
-// HELPER PARA CONVERTIR IMAGEN A BASE64
-const cargarImagenBase64 = (url) => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
-      resolve(canvas.toDataURL("image/png"));
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
-};
-
-// DIBUJAR MARCO Y MARCAS DE AGUA EN CUALQUIER PÁGINA
-const dibujarFondoBoletin = (doc, logoBase64) => {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-
-  // Marco de seguridad
-  const frameOuter = 6;
-  const frameInner = 8.6;
-  doc.setDrawColor(...INK.navy);
-  doc.setLineWidth(0.9);
-  doc.rect(frameOuter, frameOuter, pageWidth - frameOuter * 2, pageHeight - frameOuter * 2);
-  doc.setDrawColor(...INK.gold);
-  doc.setLineWidth(0.3);
-  doc.rect(frameInner, frameInner, pageWidth - frameInner * 2, pageHeight - frameInner * 2);
-
-  // Guilloche
-  doc.setDrawColor(...INK.gold);
-  doc.setLineWidth(0.15);
-  for (let x = frameInner + 4; x < pageWidth - frameInner - 4; x += 4) {
-    doc.line(x, frameInner, x, frameInner + 1.3);
-    doc.line(x, pageHeight - frameInner, x, pageHeight - frameInner - 1.3);
-  }
-
-  // Marcas de agua
-  if (logoBase64) {
-    try {
-      doc.saveGraphicsState();
-      if (doc.setGState) doc.setGState(new doc.GState({ opacity: 0.045 }));
-      const wmSize = 34;
-      const stepX = 52;
-      const stepY = 62;
-      let rowOffset = 0;
-      for (let y = -10; y < pageHeight + 20; y += stepY) {
-        for (let x = -10 + rowOffset; x < pageWidth + 20; x += stepX) {
-          try {
-            doc.addImage(logoBase64, "PNG", x, y, wmSize, wmSize, undefined, undefined, 28);
-          } catch {
-            doc.addImage(logoBase64, "PNG", x, y, wmSize, wmSize);
-          }
-        }
-        rowOffset = rowOffset === 0 ? stepX / 2 : 0;
-      }
-      doc.restoreGraphicsState();
-    } catch (err) {}
-
-    try {
-      doc.saveGraphicsState();
-      if (doc.setGState) doc.setGState(new doc.GState({ opacity: 0.06 }));
-      const bigSize = 120;
-      doc.addImage(
-        logoBase64,
-        "PNG",
-        (pageWidth - bigSize) / 2,
-        (pageHeight - bigSize) / 2,
-        bigSize,
-        bigSize
-      );
-      doc.restoreGraphicsState();
-    } catch {}
-  }
-};
-
-const exportarPDF = async () => {
-  if (!dashboardRef.current) return;
-
-  try {
-    setGenerandoPdf(true);
-
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "letter",
+  // HELPER PARA CONVERTIR IMAGEN A BASE64
+  const cargarImagenBase64 = (url) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "Anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => resolve(null);
+      img.src = url;
     });
+  };
 
+  // DIBUJAR MARCO Y MARCAS DE AGUA EN CUALQUIER PÁGINA
+  const dibujarFondoBoletin = (doc, logoBase64) => {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 16;
 
-    // Cargar imagen de forma segura
-    const logoBase64 = await cargarImagenBase64("/logo.png");
+    // Marco de seguridad
+    const frameOuter = 6;
+    const frameInner = 8.6;
+    doc.setDrawColor(...INK.navy);
+    doc.setLineWidth(0.9);
+    doc.rect(frameOuter, frameOuter, pageWidth - frameOuter * 2, pageHeight - frameOuter * 2);
+    doc.setDrawColor(...INK.gold);
+    doc.setLineWidth(0.3);
+    doc.rect(frameInner, frameInner, pageWidth - frameInner * 2, pageHeight - frameInner * 2);
 
-    // Dibuja el marco y fondo en la primera página
-    dibujarFondoBoletin(doc, logoBase64);
-
-    // Encabezado
-    let currentY = 20;
-    if (logoBase64) {
-      const logoHeaderSize = 20;
-      doc.setDrawColor(...INK.gold);
-      doc.setLineWidth(0.4);
-      doc.circle(pageWidth / 2, currentY + logoHeaderSize / 2, logoHeaderSize / 2 + 1.6);
-      doc.addImage(logoBase64, "PNG", (pageWidth - logoHeaderSize) / 2, currentY, logoHeaderSize, logoHeaderSize);
-      currentY += logoHeaderSize + 6;
+    // Guilloche
+    doc.setDrawColor(...INK.gold);
+    doc.setLineWidth(0.15);
+    for (let x = frameInner + 4; x < pageWidth - frameInner - 4; x += 4) {
+      doc.line(x, frameInner, x, frameInner + 1.3);
+      doc.line(x, pageHeight - frameInner, x, pageHeight - frameInner - 1.3);
     }
 
-    doc.setFont("times", "bold");
-    doc.setFontSize(15);
-    doc.setTextColor(...INK.navy);
-    doc.text(COLEGIO_NOMBRE, pageWidth / 2, currentY, { align: "center" });
-
-    currentY += 6;
-    doc.setFont("times", "italic");
-    doc.setFontSize(10.5);
-    doc.setTextColor(...INK.gold);
-    doc.text("Reporte Estadístico e Indicadores Académicos", pageWidth / 2, currentY, { align: "center" });
-
-    currentY += 5;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.setTextColor(...INK.slate);
-    doc.text(
-      `GESTIÓN ACADÉMICA ${new Date().getFullYear()}   ·   FECHA DE EMISIÓN: ${new Date().toLocaleDateString("es-BO")}`,
-      pageWidth / 2,
-      currentY,
-      { align: "center" }
-    );
-
-    currentY += 4.5;
-    const rt = currentY;
-    doc.setDrawColor(...INK.gold);
-    doc.setLineWidth(0.6);
-    doc.line(margin, rt, pageWidth / 2 - 4, rt);
-    doc.line(pageWidth / 2 + 4, rt, pageWidth - margin, rt);
-    doc.setFillColor(...INK.gold);
-    doc.triangle(pageWidth / 2 - 2, rt, pageWidth / 2 + 2, rt, pageWidth / 2, rt - 2.2, "F");
-    doc.triangle(pageWidth / 2 - 2, rt, pageWidth / 2 + 2, rt, pageWidth / 2, rt + 2.2, "F");
-
-    currentY += 7;
-
-    // Resumen Ejecutivo (KPIs)
-    doc.setFont("times", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...INK.navy);
-    doc.text("1. RESUMEN GENERAL DE INDICADORES", margin, currentY);
-
-    autoTable(doc, {
-      startY: currentY + 3,
-      head: [["PROMEDIO GENERAL", "MATERIAS EVALUADAS", "PARALELOS ACTIVOS", "TOTAL USUARIOS"]],
-      body: [[
-        `${promedioGeneral} / 100 pts`,
-        `${notasPorMateria.length} Asignaturas`,
-        `${paralelos.length} Secciones`,
-        `${usuarios.length} Registrados`
-      ]],
-      theme: "grid",
-      margin: { left: margin, right: margin },
-      styles: {
-        font: "helvetica",
-        fontSize: 8.5,
-        halign: "center",
-        valign: "middle",
-        cellPadding: 3,
-        textColor: INK.ink,
-        lineColor: [214, 211, 199],
-        lineWidth: 0.15,
-      },
-      headStyles: {
-        fillColor: INK.navy,
-        textColor: [250, 248, 242],
-        fontStyle: "bold",
-        fontSize: 8,
-      },
-      alternateRowStyles: { fillColor: [247, 244, 235] },
-    });
-
-    // Captura HTML2Canvas
-    const canvas = await html2canvas(dashboardRef.current, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: "#FFFFFF",
-    });
-
-    const imgData = canvas.toDataURL("image/png");
-    const imgWidth = pageWidth - margin * 2;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    currentY = (doc.lastAutoTable?.finalY || currentY + 30) + 7;
-    doc.setFont("times", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...INK.navy);
-    doc.text("2. GRÁFICOS ANALÍTICOS DE RENDIMIENTO", margin, currentY);
-
-    currentY += 4;
-    const maxImgHeight = pageHeight - currentY - 18;
-    doc.addImage(imgData, "PNG", margin, currentY, imgWidth, Math.min(imgHeight, maxImgHeight));
-
-    // Página 2: Tabla desglosada
-    doc.addPage();
-    dibujarFondoBoletin(doc, logoBase64);
-
-    doc.setFont("times", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(...INK.navy);
-    doc.text("3. DESGLOSE DETALLADO DE NOTAS POR MATERIA", margin, 20);
-
-    const filasMateria = notasPorMateria.map((m) => [
-      (m.materia || "ASIGNATURA").toUpperCase(),
-      m.evaluaciones || "0",
-      `${m.promedio} pts`,
-      m.promedio >= 85 ? "SOBRESALIENTE" : m.promedio >= 70 ? "SATISFACTORIO" : "EN RIESGO",
-    ]);
-
-    autoTable(doc, {
-      startY: 24,
-      head: [["ASIGNATURA / MATERIA", "EVALUACIONES REGISTRADAS", "PROMEDIO", "ESTADO ACADÉMICO"]],
-      body: filasMateria,
-      theme: "grid",
-      margin: { left: margin, right: margin, top: 25, bottom: 20 },
-      styles: {
-        font: "helvetica",
-        fontSize: 8.5,
-        cellPadding: 3,
-        textColor: INK.ink,
-        valign: "middle",
-        lineColor: [214, 211, 199],
-        lineWidth: 0.15,
-      },
-      headStyles: {
-        fillColor: INK.navy,
-        textColor: [250, 248, 242],
-        fontStyle: "bold",
-        halign: "center",
-        fontSize: 8,
-        cellPadding: 3.2,
-      },
-      columnStyles: {
-        0: { cellWidth: 70, fontStyle: "bold" },
-        1: { cellWidth: 42, halign: "center" },
-        2: { cellWidth: 33, halign: "center", fontStyle: "bold", textColor: INK.navy },
-        3: { cellWidth: 36.9, halign: "center", fontStyle: "bold" },
-      },
-      alternateRowStyles: { fillColor: [247, 244, 235] },
-      didParseCell: (data) => {
-        if (data.section === "body" && data.column.index === 3) {
-          const val = data.cell.raw;
-          if (val === "SOBRESALIENTE") data.cell.styles.textColor = [6, 95, 70];
-          if (val === "EN RIESGO") data.cell.styles.textColor = [178, 34, 34];
-          if (val === "SATISFACTORIO") data.cell.styles.textColor = [30, 58, 95];
+    // Marcas de agua
+    if (logoBase64) {
+      try {
+        doc.saveGraphicsState();
+        if (doc.setGState) doc.setGState(new doc.GState({ opacity: 0.045 }));
+        const wmSize = 34;
+        const stepX = 52;
+        const stepY = 62;
+        let rowOffset = 0;
+        for (let y = -10; y < pageHeight + 20; y += stepY) {
+          for (let x = -10 + rowOffset; x < pageWidth + 20; x += stepX) {
+            try {
+              doc.addImage(logoBase64, "PNG", x, y, wmSize, wmSize, undefined, undefined, 28);
+            } catch {
+              doc.addImage(logoBase64, "PNG", x, y, wmSize, wmSize);
+            }
+          }
+          rowOffset = rowOffset === 0 ? stepX / 2 : 0;
         }
-      },
-      didDrawPage: (data) => {
-        dibujarFondoBoletin(doc, logoBase64);
+        doc.restoreGraphicsState();
+      } catch (err) {}
 
-        doc.setDrawColor(...INK.gold);
-        doc.setLineWidth(0.5);
-        doc.line(
-          margin,
-          data.table.head[0].cells[0].y + data.table.head[0].height,
-          pageWidth - margin,
-          data.table.head[0].cells[0].y + data.table.head[0].height
+      try {
+        doc.saveGraphicsState();
+        if (doc.setGState) doc.setGState(new doc.GState({ opacity: 0.06 }));
+        const bigSize = 120;
+        doc.addImage(
+          logoBase64,
+          "PNG",
+          (pageWidth - bigSize) / 2,
+          (pageHeight - bigSize) / 2,
+          bigSize,
+          bigSize
         );
-      },
-    });
+        doc.restoreGraphicsState();
+      } catch {}
+    }
+  };
 
-    // Pie de página
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
+  const exportarPDF = async () => {
+    if (!dashboardRef.current) return;
+
+    try {
+      setGenerandoPdf(true);
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "letter",
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 16;
+
+      const logoBase64 = await cargarImagenBase64("/logo.png");
+
+      dibujarFondoBoletin(doc, logoBase64);
+
+      // Encabezado
+      let currentY = 20;
+      if (logoBase64) {
+        const logoHeaderSize = 20;
+        doc.setDrawColor(...INK.gold);
+        doc.setLineWidth(0.4);
+        doc.circle(pageWidth / 2, currentY + logoHeaderSize / 2, logoHeaderSize / 2 + 1.6);
+        doc.addImage(logoBase64, "PNG", (pageWidth - logoHeaderSize) / 2, currentY, logoHeaderSize, logoHeaderSize);
+        currentY += logoHeaderSize + 6;
+      }
+
+      doc.setFont("times", "bold");
+      doc.setFontSize(15);
+      doc.setTextColor(...INK.navy);
+      doc.text(COLEGIO_NOMBRE, pageWidth / 2, currentY, { align: "center" });
+
+      currentY += 6;
       doc.setFont("times", "italic");
+      doc.setFontSize(10.5);
+      doc.setTextColor(...INK.gold);
+      doc.text("Reporte Estadístico e Indicadores Académicos", pageWidth / 2, currentY, { align: "center" });
+
+      currentY += 5;
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(...INK.slate);
       doc.text(
-        `Reporte Estadístico Académico Oficial   ·   Página ${i} de ${pageCount}`,
+        `GESTIÓN ACADÉMICA ${new Date().getFullYear()}   ·   FECHA DE EMISIÓN: ${new Date().toLocaleDateString("es-BO")}`,
         pageWidth / 2,
-        pageHeight - 10,
+        currentY,
         { align: "center" }
       );
-    }
 
-    doc.save(`reporte_estadisticas_notas_${new Date().toISOString().slice(0, 10)}.pdf`);
-  } catch (err) {
-    console.error("Error al exportar PDF:", err);
-  } finally {
-    setGenerandoPdf(false);
-  }
-};
+      currentY += 4.5;
+      const rt = currentY;
+      doc.setDrawColor(...INK.gold);
+      doc.setLineWidth(0.6);
+      doc.line(margin, rt, pageWidth / 2 - 4, rt);
+      doc.line(pageWidth / 2 + 4, rt, pageWidth - margin, rt);
+      doc.setFillColor(...INK.gold);
+      doc.triangle(pageWidth / 2 - 2, rt, pageWidth / 2 + 2, rt, pageWidth / 2, rt - 2.2, "F");
+      doc.triangle(pageWidth / 2 - 2, rt, pageWidth / 2 + 2, rt, pageWidth / 2, rt + 2.2, "F");
+
+      currentY += 7;
+
+      // Resumen Ejecutivo (KPIs)
+      doc.setFont("times", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...INK.navy);
+      doc.text("1. RESUMEN GENERAL DE INDICADORES Y RENDIMIENTO", margin, currentY);
+
+      autoTable(doc, {
+        startY: currentY + 3,
+        head: [["PROMEDIO GENERAL", "APROBADOS", "REPROBADOS", "ABANDONO"]],
+        body: [[
+          `${promedioGeneral} / 100 pts`,
+          `${estadisticasRendimiento.aprobados} (${estadisticasRendimiento.porcentajeAprobados}%)`,
+          `${estadisticasRendimiento.reprobados} (${estadisticasRendimiento.porcentajeReprobados}%)`,
+          `${estadisticasRendimiento.abandono} (${estadisticasRendimiento.porcentajeAbandono}%)`
+        ]],
+        theme: "grid",
+        margin: { left: margin, right: margin },
+        styles: {
+          font: "helvetica",
+          fontSize: 8.5,
+          halign: "center",
+          valign: "middle",
+          cellPadding: 3,
+          textColor: INK.ink,
+          lineColor: [214, 211, 199],
+          lineWidth: 0.15,
+        },
+        headStyles: {
+          fillColor: INK.navy,
+          textColor: [250, 248, 242],
+          fontStyle: "bold",
+          fontSize: 8,
+        },
+        alternateRowStyles: { fillColor: [247, 244, 235] },
+      });
+
+      // Captura HTML2Canvas del Dashboard
+      const canvas = await html2canvas(dashboardRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#FFFFFF",
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const imgWidth = pageWidth - margin * 2;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      currentY = (doc.lastAutoTable?.finalY || currentY + 30) + 7;
+      doc.setFont("times", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...INK.navy);
+      doc.text("2. GRÁFICOS ANALÍTICOS Y ESTADÍSTICAS", margin, currentY);
+
+      currentY += 4;
+      const maxImgHeight = pageHeight - currentY - 18;
+      doc.addImage(imgData, "PNG", margin, currentY, imgWidth, Math.min(imgHeight, maxImgHeight));
+
+      // Página 2: Tabla desglosada por materias
+      doc.addPage();
+      dibujarFondoBoletin(doc, logoBase64);
+
+      doc.setFont("times", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(...INK.navy);
+      doc.text("3. DESGLOSE DETALLADO DE NOTAS POR MATERIA", margin, 20);
+
+      const filasMateria = notasPorMateria.map((m) => [
+        (m.materia || "ASIGNATURA").toUpperCase(),
+        m.evaluaciones || "0",
+        `${m.promedio} pts`,
+        m.promedio >= 85 ? "SOBRESALIENTE" : m.promedio >= 70 ? "SATISFACTORIO" : "EN RIESGO",
+      ]);
+
+      autoTable(doc, {
+        startY: 24,
+        head: [["ASIGNATURA / MATERIA", "EVALUACIONES REGISTRADAS", "PROMEDIO", "ESTADO ACADÉMICO"]],
+        body: filasMateria,
+        theme: "grid",
+        margin: { left: margin, right: margin, top: 25, bottom: 20 },
+        styles: {
+          font: "helvetica",
+          fontSize: 8.5,
+          cellPadding: 3,
+          textColor: INK.ink,
+          valign: "middle",
+          lineColor: [214, 211, 199],
+          lineWidth: 0.15,
+        },
+        headStyles: {
+          fillColor: INK.navy,
+          textColor: [250, 248, 242],
+          fontStyle: "bold",
+          halign: "center",
+          fontSize: 8,
+          cellPadding: 3.2,
+        },
+        columnStyles: {
+          0: { cellWidth: 70, fontStyle: "bold" },
+          1: { cellWidth: 42, halign: "center" },
+          2: { cellWidth: 33, halign: "center", fontStyle: "bold", textColor: INK.navy },
+          3: { cellWidth: 36.9, halign: "center", fontStyle: "bold" },
+        },
+        alternateRowStyles: { fillColor: [247, 244, 235] },
+        didParseCell: (data) => {
+          if (data.section === "body" && data.column.index === 3) {
+            const val = data.cell.raw;
+            if (val === "SOBRESALIENTE") data.cell.styles.textColor = [6, 95, 70];
+            if (val === "EN RIESGO") data.cell.styles.textColor = [178, 34, 34];
+            if (val === "SATISFACTORIO") data.cell.styles.textColor = [30, 58, 95];
+          }
+        },
+        didDrawPage: (data) => {
+          dibujarFondoBoletin(doc, logoBase64);
+
+          doc.setDrawColor(...INK.gold);
+          doc.setLineWidth(0.5);
+          doc.line(
+            margin,
+            data.table.head[0].cells[0].y + data.table.head[0].height,
+            pageWidth - margin,
+            data.table.head[0].cells[0].y + data.table.head[0].height
+          );
+        },
+      });
+
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFont("times", "italic");
+        doc.setFontSize(7.5);
+        doc.setTextColor(...INK.slate);
+        doc.text(
+          `Reporte Estadístico Académico Oficial   ·   Página ${i} de ${pageCount}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: "center" }
+        );
+      }
+
+      doc.save(`reporte_estadisticas_notas_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      console.error("Error al exportar PDF:", err);
+    } finally {
+      setGenerandoPdf(false);
+    }
+  };
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -571,12 +606,12 @@ const exportarPDF = async () => {
           </motion.button>
         </motion.div>
 
-        {/* TARJETAS DE RESUMEN KPI */}
+        {/* TARJETAS DE RESUMEN KPI CON APROBADOS, REPROBADOS Y ABANDONO */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8"
+          className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8"
         >
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-3.5 sm:p-4 shadow-sm">
             <div className="flex items-center gap-2 text-blue-700 text-[11px] sm:text-xs uppercase tracking-wide font-semibold mb-2">
@@ -585,25 +620,38 @@ const exportarPDF = async () => {
             <p className="text-xl sm:text-2xl font-bold text-slate-900">{promedioGeneral} <span className="text-xs font-normal text-slate-500">/ 100</span></p>
           </div>
 
-          <div className="bg-gradient-to-br from-sky-50 to-sky-100 border border-sky-200 rounded-xl p-3.5 sm:p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-sky-700 text-[11px] sm:text-xs uppercase tracking-wide font-semibold mb-2">
-              <BookOpen size={14} /> Materias Evaluadas
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-slate-900">{notasPorMateria.length}</p>
-          </div>
-
           <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-3.5 sm:p-4 shadow-sm">
             <div className="flex items-center gap-2 text-emerald-700 text-[11px] sm:text-xs uppercase tracking-wide font-semibold mb-2">
-              <GraduationCap size={14} /> Paralelos Activos
+              <CheckCircle2 size={14} /> Aprobados
             </div>
-            <p className="text-xl sm:text-2xl font-bold text-slate-900">{paralelos.length}</p>
+            <p className="text-xl sm:text-2xl font-bold text-emerald-900">
+              {estadisticasRendimiento.aprobados} <span className="text-xs font-semibold text-emerald-700">({estadisticasRendimiento.porcentajeAprobados}%)</span>
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-xl p-3.5 sm:p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-red-700 text-[11px] sm:text-xs uppercase tracking-wide font-semibold mb-2">
+              <XCircle size={14} /> Reprobados
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-red-900">
+              {estadisticasRendimiento.reprobados} <span className="text-xs font-semibold text-red-700">({estadisticasRendimiento.porcentajeReprobados}%)</span>
+            </p>
           </div>
 
           <div className="bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-xl p-3.5 sm:p-4 shadow-sm">
             <div className="flex items-center gap-2 text-amber-700 text-[11px] sm:text-xs uppercase tracking-wide font-semibold mb-2">
-              <Users size={14} /> Total Usuarios
+              <UserX size={14} /> Abandono
             </div>
-            <p className="text-xl sm:text-2xl font-bold text-slate-900">{usuarios.length}</p>
+            <p className="text-xl sm:text-2xl font-bold text-amber-900">
+              {estadisticasRendimiento.abandono} <span className="text-xs font-semibold text-amber-700">({estadisticasRendimiento.porcentajeAbandono}%)</span>
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-sky-50 to-sky-100 border border-sky-200 rounded-xl p-3.5 sm:p-4 shadow-sm col-span-2 md:col-span-1">
+            <div className="flex items-center gap-2 text-sky-700 text-[11px] sm:text-xs uppercase tracking-wide font-semibold mb-2">
+              <BookOpen size={14} /> Total Evaluados
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-slate-900">{estadisticasRendimiento.total}</p>
           </div>
         </motion.div>
 
@@ -673,46 +721,90 @@ const exportarPDF = async () => {
             </div>
           </div>
 
-          {/* GRÁFICO 3: DISTRIBUCIÓN POR ROL */}
-          <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h2 className="text-xs font-bold text-slate-800 flex items-center gap-2 tracking-wide uppercase">
-                <PieIcon size={16} className="text-amber-600" /> Distribución Demográfica de Usuarios
-              </h2>
-              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                Roles
-              </span>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* GRÁFICO 3: ESTADO ACADÉMICO (APROBADOS, REPROBADOS, ABANDONO) */}
+            <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <h2 className="text-xs font-bold text-slate-800 flex items-center gap-2 tracking-wide uppercase">
+                  <PieIcon size={16} className="text-red-600" /> Estado Académico (Aprobados / Reprobados / Abandono)
+                </h2>
+                <span className="text-[10px] font-semibold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                  Porcentajes
+                </span>
+              </div>
+
+              {estadisticasRendimiento.total === 0 ? (
+                <div className="h-64 flex items-center justify-center text-slate-400 text-xs italic">
+                  No hay registros de calificaciones para procesar.
+                </div>
+              ) : (
+                <div className="h-64 w-full flex justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={datosRendimientoPie}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        innerRadius={35}
+                        paddingAngle={4}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                      >
+                        {datosRendimientoPie.map((entry, index) => (
+                          <Cell key={`cell-rend-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "5px" }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
 
-            {rolesUsuarios.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-slate-400 text-xs italic">
-                No hay registros de usuarios para mostrar.
+            {/* GRÁFICO 4: DISTRIBUCIÓN POR ROL */}
+            <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <h2 className="text-xs font-bold text-slate-800 flex items-center gap-2 tracking-wide uppercase">
+                  <Users size={16} className="text-amber-600" /> Distribución Demográfica de Usuarios
+                </h2>
+                <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                  Roles
+                </span>
               </div>
-            ) : (
-              <div className="h-64 w-full flex justify-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={rolesUsuarios}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={85}
-                      innerRadius={40}
-                      paddingAngle={4}
-                      label={({ name, value }) => `${name}: ${value}`}
-                    >
-                      {rolesUsuarios.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "5px" }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            )}
+
+              {rolesUsuarios.length === 0 ? (
+                <div className="h-64 flex items-center justify-center text-slate-400 text-xs italic">
+                  No hay registros de usuarios para mostrar.
+                </div>
+              ) : (
+                <div className="h-64 w-full flex justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={rolesUsuarios}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        innerRadius={35}
+                        paddingAngle={4}
+                        label={({ name, value }) => `${name}: ${value}`}
+                      >
+                        {rolesUsuarios.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "5px" }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
