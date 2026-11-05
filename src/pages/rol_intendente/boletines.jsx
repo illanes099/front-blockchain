@@ -589,7 +589,7 @@ export const Boletines = () => {
 
       // Sección Blockchain y QR
       currentY += 20;
-      // const urlVerificacion = `http://localhost:5173/verificar?hash=${hashReal}`; 1
+      // const urlVerificacion = `http://localhost:5173/verificar?hash=${hashReal}`; 
       const urlVerificacion = `https://boletines-daza.pages.dev/verificar?hash=${hashReal}`;
       const textoContenidoQR = `Institución: ${colegioNombre}\nEstudiante: ${estudiante.nombre}\nVerificación: ${urlVerificacion}`;
       const qrBase64 = await generarQRConLogo(textoContenidoQR, "/logo.png");
