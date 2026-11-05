@@ -29,12 +29,15 @@ import {
   UserX,
   CheckCircle2,
   XCircle,
+  Filter,
+  Layers,
 } from "lucide-react";
 
 import { getCalificacionesMaterias } from "../../api/api.calificaciones";
 import { getEstudiantes } from "../../api/api.estudiante";
 import { getParalelos } from "../../api/api.paralelos";
 import { getUsuarios } from "../../api/api.usuario";
+import { getMaterias } from "../../api/api.materia";
 
 export const Estadisticas = () => {
   const dashboardRef = useRef(null);
@@ -43,10 +46,17 @@ export const Estadisticas = () => {
   const [calificacionesMaterias, setCalificacionesMaterias] = useState([]);
   const [estudiantes, setEstudiantes] = useState([]);
   const [paralelos, setParalelos] = useState([]);
+  const [materias, setMaterias] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Estados de Filtros (Solo Paralelo y Materia)
+  const [filter, setFilter] = useState({
+    paralelo: "",
+    materia: "",
+  });
 
   // ================== CARGA DE DATOS DESDE LAS APIS ==================
   useEffect(() => {
@@ -59,17 +69,20 @@ export const Estadisticas = () => {
           respUsuarios,
           dataEstudiantes,
           dataParalelos,
+          dataMaterias,
           dataCalifMaterias,
         ] = await Promise.all([
           getUsuarios(),
           getEstudiantes(),
           getParalelos(),
+          getMaterias(),
           getCalificacionesMaterias(),
         ]);
 
         setUsuarios(respUsuarios.data || []);
         setEstudiantes(dataEstudiantes || []);
         setParalelos(dataParalelos || []);
+        setMaterias(dataMaterias || []);
         setCalificacionesMaterias(dataCalifMaterias || []);
       } catch (err) {
         console.error(err);
@@ -82,12 +95,46 @@ export const Estadisticas = () => {
     fetchData();
   }, []);
 
-  // ================== PROMEDIO DE NOTAS POR MATERIA ==================
+  // ================== MAPAS DE APOYO PARA NOMBRES ==================
+  const mapEstudianteParalelo = useMemo(() => {
+    const map = new Map();
+    estudiantes.forEach((e) => {
+      map.set(e.estudiante_id, e.paralelo_id);
+    });
+    return map;
+  }, [estudiantes]);
+
+  const mapParaleloDescripcion = useMemo(() => {
+    const map = new Map();
+    paralelos.forEach((p) => {
+      map.set(p.paralelo_id, p.descripcion);
+    });
+    return map;
+  }, [paralelos]);
+
+  // ================== CALIFICACIONES FILTRADAS EN TIEMPO REAL ==================
+  const calificacionesFiltradas = useMemo(() => {
+    const fPar = filter.paralelo.toLowerCase().trim();
+    const fMat = filter.materia.toLowerCase().trim();
+
+    return calificacionesMaterias.filter((c) => {
+      const paraleloId = mapEstudianteParalelo.get(c.estudiante_id);
+      const paraleloDesc = (mapParaleloDescripcion.get(paraleloId) || "").toLowerCase();
+      const nombreMateria = (c.nombre || "").toLowerCase();
+
+      const coincideParalelo = !fPar || fPar === "todos" || paraleloDesc.includes(fPar);
+      const coincideMateria = !fMat || fMat === "todas" || nombreMateria.includes(fMat);
+
+      return coincideParalelo && coincideMateria;
+    });
+  }, [calificacionesMaterias, filter, mapEstudianteParalelo, mapParaleloDescripcion]);
+
+  // ================== PROMEDIO DE NOTAS POR MATERIA (FILTRADO) ==================
   const notasPorMateria = useMemo(() => {
-    if (!calificacionesMaterias.length) return [];
+    if (!calificacionesFiltradas.length) return [];
 
     const mapa = new Map();
-    calificacionesMaterias.forEach((c) => {
+    calificacionesFiltradas.forEach((c) => {
       const materia = c.nombre || "Sin materia";
       const nota = Number(c.total) || 0;
 
@@ -108,26 +155,15 @@ export const Estadisticas = () => {
       promedio: Number((m.suma / m.cantidad).toFixed(2)),
       evaluaciones: m.cantidad,
     }));
-  }, [calificacionesMaterias]);
+  }, [calificacionesFiltradas]);
 
-  // ================== PROMEDIO DE NOTAS POR PARALELO ==================
+  // ================== PROMEDIO DE NOTAS POR PARALELO (FILTRADO) ==================
   const promedioPorParalelo = useMemo(() => {
-    if (!calificacionesMaterias.length || !estudiantes.length || !paralelos.length)
-      return [];
-
-    const mapEstudianteParalelo = new Map();
-    estudiantes.forEach((e) => {
-      mapEstudianteParalelo.set(e.estudiante_id, e.paralelo_id);
-    });
-
-    const mapParaleloDescripcion = new Map();
-    paralelos.forEach((p) => {
-      mapParaleloDescripcion.set(p.paralelo_id, p.descripcion);
-    });
+    if (!calificacionesFiltradas.length) return [];
 
     const mapa = new Map();
 
-    calificacionesMaterias.forEach((c) => {
+    calificacionesFiltradas.forEach((c) => {
       const paraleloId = mapEstudianteParalelo.get(c.estudiante_id);
       if (!paraleloId) return;
 
@@ -150,19 +186,18 @@ export const Estadisticas = () => {
       paralelo: p.paralelo,
       promedio: Number((p.suma / p.cantidad).toFixed(2)),
     }));
-  }, [calificacionesMaterias, estudiantes, paralelos]);
+  }, [calificacionesFiltradas, mapEstudianteParalelo, mapParaleloDescripcion]);
 
-  // ================== ESTADÍSTICAS DE RENDIMIENTO (APROBADOS / REPROBADOS / ABANDONO) ==================
+  // ================== ESTADÍSTICAS DE RENDIMIENTO (FILTRADO) ==================
   const estadisticasRendimiento = useMemo(() => {
-    if (!calificacionesMaterias.length) return { aprobados: 0, reprobados: 0, abandono: 0, total: 0, porcentajeAprobados: 0, porcentajeReprobados: 0, porcentajeAbandono: 0 };
+    if (!calificacionesFiltradas.length) return { aprobados: 0, reprobados: 0, abandono: 0, total: 0, porcentajeAprobados: 0, porcentajeReprobados: 0, porcentajeAbandono: 0 };
 
     let aprobados = 0;
     let reprobados = 0;
     let abandono = 0;
 
-    calificacionesMaterias.forEach((c) => {
+    calificacionesFiltradas.forEach((c) => {
       const total = Number(c.total) || 0;
-      // Criterio institucional: Abandono si nota es 0 o indefinida, Reprobado < 51, Aprobado >= 51
       if (total === 0 && (Number(c.primer_trimestre) || 0) === 0 && (Number(c.segundo_trimestre) || 0) === 0) {
         abandono++;
       } else if (total >= 51) {
@@ -172,7 +207,7 @@ export const Estadisticas = () => {
       }
     });
 
-    const total = calificacionesMaterias.length;
+    const total = calificacionesFiltradas.length;
     return {
       aprobados,
       reprobados,
@@ -182,7 +217,7 @@ export const Estadisticas = () => {
       porcentajeReprobados: total ? ((reprobados / total) * 100).toFixed(1) : 0,
       porcentajeAbandono: total ? ((abandono / total) * 100).toFixed(1) : 0,
     };
-  }, [calificacionesMaterias]);
+  }, [calificacionesFiltradas]);
 
   const datosRendimientoPie = useMemo(() => [
     { name: "Aprobados", value: estadisticasRendimiento.aprobados, color: "#059669" },
@@ -190,13 +225,16 @@ export const Estadisticas = () => {
     { name: "Abandono", value: estadisticasRendimiento.abandono, color: "#D97706" },
   ], [estadisticasRendimiento]);
 
-  // ================== DISTRIBUCIÓN DE ROLES ==================
+  // ================== DISTRIBUCIÓN DE ROLES (EXCLUYENDO ADMIN) ==================
   const rolesUsuarios = useMemo(() => {
     if (!usuarios.length) return [];
 
     const conteo = new Map();
     usuarios.forEach((u) => {
       const rolRaw = u.rol || "Sin Rol";
+      const rolLower = rolRaw.toLowerCase();
+      if (rolLower === "admin" || rolLower === "administrador") return;
+
       const rolFormatted = rolRaw.charAt(0).toUpperCase() + rolRaw.slice(1).toLowerCase();
       conteo.set(rolFormatted, (conteo.get(rolFormatted) || 0) + 1);
     });
@@ -207,14 +245,14 @@ export const Estadisticas = () => {
     }));
   }, [usuarios]);
 
-  // ================== MÉTRICAS GENERALES ==================
+  // ================== MÉTRICAS GENERALES (FILTRADO) ==================
   const promedioGeneral = useMemo(() => {
-    if (!calificacionesMaterias.length) return "0.0";
-    const total = calificacionesMaterias.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
-    return (total / calificacionesMaterias.length).toFixed(1);
-  }, [calificacionesMaterias]);
+    if (!calificacionesFiltradas.length) return "0.0";
+    const total = calificacionesFiltradas.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
+    return (total / calificacionesFiltradas.length).toFixed(1);
+  }, [calificacionesFiltradas]);
 
-  const COLORS = ["#2563EB", "#059669", "#D97706", "#DB2777", "#4F46E5"];
+  const COLORS = ["#059669", "#D97706", "#DB2777", "#4F46E5"];
 
   /* ============================================================
      TOKENS DE DISEÑO — PALETA OFICIAL DIPLOMA Y CERTIFICACIÓN
@@ -232,7 +270,6 @@ export const Estadisticas = () => {
 
   const COLEGIO_NOMBRE = "UNIDAD EDUCATIVA ROBERTO ALVARADO DAZA 'B'";
 
-  // HELPER PARA CONVERTIR IMAGEN A BASE64
   const cargarImagenBase64 = (url) => {
     return new Promise((resolve) => {
       const img = new Image();
@@ -250,12 +287,10 @@ export const Estadisticas = () => {
     });
   };
 
-  // DIBUJAR MARCO Y MARCAS DE AGUA EN CUALQUIER PÁGINA
   const dibujarFondoBoletin = (doc, logoBase64) => {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    // Marco de seguridad
     const frameOuter = 6;
     const frameInner = 8.6;
     doc.setDrawColor(...INK.navy);
@@ -265,7 +300,6 @@ export const Estadisticas = () => {
     doc.setLineWidth(0.3);
     doc.rect(frameInner, frameInner, pageWidth - frameInner * 2, pageHeight - frameInner * 2);
 
-    // Guilloche
     doc.setDrawColor(...INK.gold);
     doc.setLineWidth(0.15);
     for (let x = frameInner + 4; x < pageWidth - frameInner - 4; x += 4) {
@@ -273,7 +307,6 @@ export const Estadisticas = () => {
       doc.line(x, pageHeight - frameInner, x, pageHeight - frameInner - 1.3);
     }
 
-    // Marcas de agua
     if (logoBase64) {
       try {
         doc.saveGraphicsState();
@@ -294,24 +327,10 @@ export const Estadisticas = () => {
         }
         doc.restoreGraphicsState();
       } catch (err) {}
-
-      try {
-        doc.saveGraphicsState();
-        if (doc.setGState) doc.setGState(new doc.GState({ opacity: 0.06 }));
-        const bigSize = 120;
-        doc.addImage(
-          logoBase64,
-          "PNG",
-          (pageWidth - bigSize) / 2,
-          (pageHeight - bigSize) / 2,
-          bigSize,
-          bigSize
-        );
-        doc.restoreGraphicsState();
-      } catch {}
     }
   };
 
+  // ================== EXPORTAR PDF BASADO EN EL FILTRADO ==================
   const exportarPDF = async () => {
     if (!dashboardRef.current) return;
 
@@ -332,7 +351,6 @@ export const Estadisticas = () => {
 
       dibujarFondoBoletin(doc, logoBase64);
 
-      // Encabezado
       let currentY = 20;
       if (logoBase64) {
         const logoHeaderSize = 20;
@@ -352,14 +370,14 @@ export const Estadisticas = () => {
       doc.setFont("times", "italic");
       doc.setFontSize(10.5);
       doc.setTextColor(...INK.gold);
-      doc.text("Reporte Estadístico e Indicadores Académicos", pageWidth / 2, currentY, { align: "center" });
+      doc.text("Reporte Estadístico e Indicadores Académicos (Filtrado)", pageWidth / 2, currentY, { align: "center" });
 
       currentY += 5;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(...INK.slate);
       doc.text(
-        `GESTIÓN ACADÉMICA ${new Date().getFullYear()}   ·   FECHA DE EMISIÓN: ${new Date().toLocaleDateString("es-BO")}`,
+        `GESTIÓN ACADÉMICA ${new Date().getFullYear()}   ·   PARALELO: ${filter.paralelo || "TODOS"}   ·   MATERIA: ${filter.materia || "TODAS"}`,
         pageWidth / 2,
         currentY,
         { align: "center" }
@@ -371,17 +389,13 @@ export const Estadisticas = () => {
       doc.setLineWidth(0.6);
       doc.line(margin, rt, pageWidth / 2 - 4, rt);
       doc.line(pageWidth / 2 + 4, rt, pageWidth - margin, rt);
-      doc.setFillColor(...INK.gold);
-      doc.triangle(pageWidth / 2 - 2, rt, pageWidth / 2 + 2, rt, pageWidth / 2, rt - 2.2, "F");
-      doc.triangle(pageWidth / 2 - 2, rt, pageWidth / 2 + 2, rt, pageWidth / 2, rt + 2.2, "F");
 
       currentY += 7;
 
-      // Resumen Ejecutivo (KPIs)
       doc.setFont("times", "bold");
       doc.setFontSize(10);
       doc.setTextColor(...INK.navy);
-      doc.text("1. RESUMEN GENERAL DE INDICADORES Y RENDIMIENTO", margin, currentY);
+      doc.text("1. RESUMEN GENERAL DE INDICADORES (FILTRADO)", margin, currentY);
 
       autoTable(doc, {
         startY: currentY + 3,
@@ -413,7 +427,6 @@ export const Estadisticas = () => {
         alternateRowStyles: { fillColor: [247, 244, 235] },
       });
 
-      // Captura HTML2Canvas del Dashboard
       const canvas = await html2canvas(dashboardRef.current, {
         scale: 2,
         useCORS: true,
@@ -435,7 +448,6 @@ export const Estadisticas = () => {
       const maxImgHeight = pageHeight - currentY - 18;
       doc.addImage(imgData, "PNG", margin, currentY, imgWidth, Math.min(imgHeight, maxImgHeight));
 
-      // Página 2: Tabla desglosada por materias
       doc.addPage();
       dibujarFondoBoletin(doc, logoBase64);
 
@@ -489,17 +501,8 @@ export const Estadisticas = () => {
             if (val === "SATISFACTORIO") data.cell.styles.textColor = [30, 58, 95];
           }
         },
-        didDrawPage: (data) => {
+        didDrawPage: () => {
           dibujarFondoBoletin(doc, logoBase64);
-
-          doc.setDrawColor(...INK.gold);
-          doc.setLineWidth(0.5);
-          doc.line(
-            margin,
-            data.table.head[0].cells[0].y + data.table.head[0].height,
-            pageWidth - margin,
-            data.table.head[0].cells[0].y + data.table.head[0].height
-          );
         },
       });
 
@@ -517,7 +520,7 @@ export const Estadisticas = () => {
         );
       }
 
-      doc.save(`reporte_estadisticas_notas_${new Date().toISOString().slice(0, 10)}.pdf`);
+      doc.save(`reporte_estadisticas_filtrado_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (err) {
       console.error("Error al exportar PDF:", err);
     } finally {
@@ -539,6 +542,29 @@ export const Estadisticas = () => {
     return null;
   };
 
+  // Función personalizada para separar las etiquetas del gráfico y evitar solapamiento
+  // Función optimizada para separar etiquetas y evitar solapamientos incluso en valores 0
+  const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent, name }) => {
+    const RADIAN = Math.PI / 180;
+    // Asignamos una distancia mayor al radio para que respase los bordes con soltura
+    const radius = outerRadius + 28;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text
+        x={x}
+        y={y}
+        fill="#334155"
+        textAnchor={x > cx ? 'start' : 'end'}
+        dominantBaseline="central"
+        fontSize={10}
+        fontWeight="600"
+      >
+        {`${name}: ${(percent * 100).toFixed(1)}%`}
+      </text>
+    );
+  };
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#EEF3FC] via-[#E9F0FB] to-[#E3ECFA] flex items-center justify-center p-4 font-sans">
@@ -602,11 +628,64 @@ export const Estadisticas = () => {
             className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-semibold rounded-md shadow-sm shadow-blue-200 px-5 py-2.5 text-xs tracking-wide transition-all disabled:opacity-50"
           >
             <Download size={15} />
-            {generandoPdf ? "Generando PDF de Reportes..." : "Exportar PDF con Gráficos"}
+            {generandoPdf ? "Generando PDF Filtrado..." : "Exportar PDF Filtrado"}
           </motion.button>
         </motion.div>
 
-        {/* TARJETAS DE RESUMEN KPI CON APROBADOS, REPROBADOS Y ABANDONO */}
+        {/* BARRA DE FILTROS (SOLO PARALELO Y MATERIA) */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="bg-gradient-to-br from-white to-blue-50/50 border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm mb-6 sm:mb-8"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Filter size={13} className="text-blue-600" />
+            <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-blue-700">
+              Filtros de Búsqueda y Estadísticas
+            </span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                <Layers size={13} /> Paralelo / Curso
+              </label>
+              <select
+                value={filter.paralelo}
+                onChange={(e) => setFilter({ ...filter, paralelo: e.target.value })}
+                className="w-full p-2.5 rounded-md bg-white border border-slate-300 text-slate-800 text-xs focus:ring-2 focus:ring-blue-400/50 outline-none transition-all"
+              >
+                <option value="">Todos los Paralelos</option>
+                {paralelos.map((p) => (
+                  <option key={p.paralelo_id} value={p.descripcion}>
+                    {p.descripcion}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                <BookOpen size={13} /> Materia / Asignatura
+              </label>
+              <select
+                value={filter.materia}
+                onChange={(e) => setFilter({ ...filter, materia: e.target.value })}
+                className="w-full p-2.5 rounded-md bg-white border border-slate-300 text-slate-800 text-xs focus:ring-2 focus:ring-blue-400/50 outline-none transition-all"
+              >
+                <option value="">Todas las Materias</option>
+                {materias.map((m) => (
+                  <option key={m.materia_id} value={m.nombre}>
+                    {m.nombre.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* TARJETAS DE RESUMEN KPI */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -671,7 +750,7 @@ export const Estadisticas = () => {
 
               {notasPorMateria.length === 0 ? (
                 <div className="h-64 flex items-center justify-center text-slate-400 text-xs italic">
-                  No hay datos suficientes de calificaciones registradas.
+                  No hay datos suficientes con los filtros seleccionados.
                 </div>
               ) : (
                 <div className="h-64 w-full">
@@ -702,7 +781,7 @@ export const Estadisticas = () => {
 
               {promedioPorParalelo.length === 0 ? (
                 <div className="h-64 flex items-center justify-center text-slate-400 text-xs italic">
-                  No hay datos suficientes para calcular promedios por paralelo.
+                  No hay datos suficientes con los filtros seleccionados.
                 </div>
               ) : (
                 <div className="h-64 w-full">
@@ -722,7 +801,7 @@ export const Estadisticas = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* GRÁFICO 3: ESTADO ACADÉMICO (APROBADOS, REPROBADOS, ABANDONO) */}
+            {/* GRÁFICO 3: ESTADO ACADÉMICO (CON SEPARACIÓN DE ETIQUETAS MEJORADA) */}
             <div className="bg-gradient-to-br from-white to-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
                 <h2 className="text-xs font-bold text-slate-800 flex items-center gap-2 tracking-wide uppercase">
@@ -740,17 +819,18 @@ export const Estadisticas = () => {
               ) : (
                 <div className="h-64 w-full flex justify-center">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
+                    <PieChart margin={{ top: 25, right: 40, bottom: 25, left: 40 }}>
                       <Pie
                         data={datosRendimientoPie}
                         dataKey="value"
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={80}
-                        innerRadius={35}
+                        outerRadius={60}
+                        innerRadius={28}
                         paddingAngle={4}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                        label={renderCustomizedLabel}
+                        labelLine={true}
                       >
                         {datosRendimientoPie.map((entry, index) => (
                           <Cell key={`cell-rend-${index}`} fill={entry.color} />
@@ -782,17 +862,18 @@ export const Estadisticas = () => {
               ) : (
                 <div className="h-64 w-full flex justify-center">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
+                    <PieChart margin={{ top: 25, right: 40, bottom: 25, left: 40 }}>
                       <Pie
                         data={rolesUsuarios}
                         dataKey="value"
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={80}
-                        innerRadius={35}
+                        outerRadius={60}
+                        innerRadius={28}
                         paddingAngle={4}
-                        label={({ name, value }) => `${name}: ${value}`}
+                        label={renderCustomizedLabel}
+                        labelLine={true}
                       >
                         {rolesUsuarios.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
