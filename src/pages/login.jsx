@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle } from "lucide-react";
+import { User, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, CheckCircle2, RefreshCw, X } from "lucide-react";
 import { login } from "../services/authServices";
 import { useNavigate } from "react-router-dom";
 
@@ -67,11 +67,50 @@ export const SchoolLogin = () => {
   const [error, setError] = useState("");
   const [showHelp, setShowHelp] = useState(false);
 
+  // Estados para el CAPTCHA de selección de imágenes (Simulado)
+  const [isCaptchaOpen, setIsCaptchaOpen] = useState(false);
+  const [captchaVerified, setCaptchaVerified] = useState(false);
+  const [selectedTiles, setSelectedTiles] = useState([]);
+  
+  // Celdas correctas simuladas (ej. celdas 1, 5 y 6 donde está el semáforo)
+  const correctTiles = [1, 5, 6]; 
+
   const navigate = useNavigate();
+
+  const handleTileClick = (index) => {
+    if (selectedTiles.includes(index)) {
+      setSelectedTiles(selectedTiles.filter((t) => t !== index));
+    } else {
+      setSelectedTiles([...selectedTiles, index]);
+    }
+  };
+
+  const handleVerifyCaptcha = () => {
+    // Verificamos si seleccionó al menos los correctos o simulamos éxito
+    const isCorrect = 
+      selectedTiles.length > 0 && 
+      correctTiles.every(t => selectedTiles.includes(t)) &&
+      selectedTiles.length <= correctTiles.length + 1;
+
+    if (isCorrect || selectedTiles.length >= 2) {
+      setCaptchaVerified(true);
+      setIsCaptchaOpen(false);
+      setError("");
+    } else {
+      setError("Por favor, selecciona todas las imágenes correspondientes.");
+      setSelectedTiles([]);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!captchaVerified) {
+      setError("Debes completar la verificación de seguridad (Captcha) para continuar.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -164,7 +203,7 @@ export const SchoolLogin = () => {
         {/* ========================================================= */}
         <div className="col-span-1 md:col-span-7 bg-slate-950/60 p-8 sm:p-12 flex flex-col justify-center relative">
           
-          <div className="mb-8">
+          <div className="mb-6">
             <h2 className="text-xl sm:text-2xl font-bold text-white tracking-wide">
               Iniciar Sesión
             </h2>
@@ -173,10 +212,10 @@ export const SchoolLogin = () => {
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleLogin} className="space-y-4">
             {/* INPUT USUARIO */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-2">
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">
                 Usuario
               </label>
               <div className="relative group">
@@ -197,7 +236,7 @@ export const SchoolLogin = () => {
 
             {/* INPUT CONTRASEÑA */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-2">
+              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">
                 Contraseña
               </label>
               <div className="relative group">
@@ -224,6 +263,133 @@ export const SchoolLogin = () => {
               </div>
             </div>
 
+            {/* WIDGET TIPO RECAPTCHA (CAJA DE VERIFICACIÓN) */}
+            <div className="pt-2">
+              <div className="bg-slate-900/90 border border-white/15 rounded-xl p-3.5 flex items-center justify-between shadow-lg backdrop-blur-md">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => !captchaVerified && setIsCaptchaOpen(true)}
+                    className={`w-7 h-7 rounded border-2 flex items-center justify-center transition-all ${
+                      captchaVerified
+                        ? "bg-emerald-500 border-emerald-400 text-white cursor-default"
+                        : "bg-black/40 border-slate-400 hover:border-blue-400 cursor-pointer"
+                    }`}
+                  >
+                    {captchaVerified && <CheckCircle2 size={18} />}
+                  </button>
+                  <div className="text-left select-none">
+                    <span className="text-xs font-semibold text-slate-200 block">
+                      {captchaVerified ? "Verificación completada" : "No soy un robot"}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">reCAPTCHA (Simulado)</span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-center">
+                  <div className="w-8 h-8 bg-blue-600/20 rounded-full flex items-center justify-center border border-blue-500/40">
+                    <ShieldCheck size={18} className="text-blue-400" />
+                  </div>
+                  <span className="text-[9px] text-slate-500 mt-0.5 tracking-tighter">Privacy - Terms</span>
+                </div>
+              </div>
+            </div>
+
+            {/* MODAL / POPUP DE LA CUADRÍCULA CAPTCHA */}
+            <AnimatePresence>
+              {isCaptchaOpen && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.9, y: 20 }}
+                    className="bg-slate-900 border border-white/20 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl"
+                  >
+                    {/* Cabecera Azul del Captcha */}
+                    <div className="bg-blue-600 p-4 text-white relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsCaptchaOpen(false)}
+                        className="absolute right-3 top-3 text-white/80 hover:text-white"
+                      >
+                        <X size={20} />
+                      </button>
+                      <p className="text-xs text-blue-100 font-medium">Selecciona todos los cuadrados con</p>
+                      <h3 className="text-lg font-bold tracking-wide">semáforos</h3>
+                      <p className="text-[11px] text-blue-100/80 mt-0.5">Si no hay ninguno, haz clic en saltar</p>
+                    </div>
+
+                    {/* Cuadrícula de 3x3 imágenes */}
+                    <div className="p-3 bg-slate-950">
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { id: 0, isTrafficLight: false, url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSME5in7khrelXvpKUEkIfP31ueeUxDD7Ubnbe9NdcfHQ&s=10" },
+                          { id: 1, isTrafficLight: true,  url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRBgCHklDWozfbBXbzdFIM6tswVFGxMWvVzwUnuA8y80g&s=10"},
+                          { id: 2, isTrafficLight: false, url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQP67FX7kOayj1JZTaZ4ddqXn2UAi4iOXw0GqJtTPSe8A&s=10" },
+                          { id: 3, isTrafficLight: false, url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR9sED2ocUWxk9DRl-C9SaDFSajaS5e_AP04lp5ArWJWg&s=10" },
+                          { id: 4, isTrafficLight: true,  url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRv966qYkOkMQQyQpFA9o81xKQdx4OVLRbd9wz9y0rWaQ&s=10" },
+                          { id: 5, isTrafficLight: false, url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGz2qay0X4tL7woYGtNFKsoccr_UX_aFTclOE2QjOShw&s=10" },
+                          { id: 6, isTrafficLight: false, url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTTe9bITwXH8tyX4k2i5DucrgXZ8ZUBJrj22FNLYAIUag&s=10" },
+                          { id: 7, isTrafficLight: true,  url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSs8mqshwW6xrEOZF2BH8WTv7jcUsu9Ci-_XycnqxBITw&s=10" },
+                          { id: 8, isTrafficLight: false, url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRtK7gT1vJwiTZ8VDRYWuj-RQTL-CyUwn4UnAkaJA4_Nw&s=10" },
+                        ].map((tile, index) => {
+                          const isSelected = selectedTiles.includes(index);
+                          return (
+                            <div
+                              key={tile.id}
+                              onClick={() => handleTileClick(index)}
+                              className={`relative h-24 rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
+                                isSelected ? "border-blue-500 scale-[0.97]" : "border-transparent opacity-80 hover:opacity-100"
+                              }`}
+                              style={{
+                                backgroundImage: `url('${tile.url}')`,
+                                backgroundSize: "cover",
+                                backgroundPosition: "center",
+                              }}
+                            >
+                              {/* Check de selección */}
+                              {isSelected && (
+                                <div className="absolute inset-0 bg-blue-500/30 flex items-center justify-center backdrop-blur-[1px]">
+                                  <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-md">
+                                    ✓
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Pie del Captcha (Botones inferiores) */}
+                    <div className="p-3 bg-slate-900 border-t border-white/10 flex items-center justify-between">
+                      <div className="flex items-center gap-1 text-slate-400">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTiles([])}
+                          title="Recargar / Cambiar imagen"
+                          className="p-2 hover:text-white transition-colors"
+                        >
+                          <RefreshCw size={18} />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleVerifyCaptcha}
+                        className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-md transition-all"
+                      >
+                        Verificar
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* ALERTAS DE ERROR */}
             <AnimatePresence>
               {error && (
@@ -233,7 +399,7 @@ export const SchoolLogin = () => {
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="flex items-start gap-2 bg-red-950/50 border border-red-500/30 text-red-200 p-3 rounded-xl text-xs font-medium backdrop-blur-sm mt-2">
+                  <div className="flex items-start gap-2 bg-red-950/50 border border-red-500/30 text-red-200 p-3 rounded-xl text-xs font-medium backdrop-blur-sm mt-1">
                     <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-400" />
                     <span>{error}</span>
                   </div>
@@ -242,7 +408,7 @@ export const SchoolLogin = () => {
             </AnimatePresence>
 
             {/* BOTÓN DE ACCESO */}
-            <div className="pt-4">
+            <div className="pt-2">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -266,7 +432,7 @@ export const SchoolLogin = () => {
           </form>
 
           {/* ÁREA DE AYUDA / RECUPERACIÓN */}
-          <div className="mt-8 text-center">
+          <div className="mt-6 text-center">
             <button
               type="button"
               onClick={() => setShowHelp(!showHelp)}
@@ -281,7 +447,7 @@ export const SchoolLogin = () => {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="mt-4"
+                  className="mt-3"
                 >
                   <p className="text-[11px] text-slate-300 bg-white/5 p-3 rounded-xl border border-white/10 leading-relaxed backdrop-blur-sm">
                     La recuperación de credenciales se realiza de forma presencial. Dirígete a la <strong>Secretaría o Dirección Académica</strong> de la institución con tu cédula de identidad para el restablecimiento de tu contraseña.
